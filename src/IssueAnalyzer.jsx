@@ -713,14 +713,6 @@ let CLAUSE_FULLTEXT = {
   translation: "신용등급 B- 이상 및 품질인증 보유 업체만 협력사 등록 가능.",
   kt_risk: "Palantir Korea LLC의 협력사 등록 요건 충족 여부 확인 필요. 미등록 상태에서 계약 집행 시 내부 절차 위반."
  },
- "LAW-하도급-13조": {
-  doc: "하도급법",
-  section: "하도급거래 공정화에 관한 법률 제13조",
-  title: "하도급대금 지급 의무 (60일)",
-  text: "원사업자는 수급사업자에게 제조 등의 위탁을 하는 경우 목적물 등의 수령일(건설위탁의 경우에는 인수일)부터 60일 이내의 기간으로 정한 지급기일까지 하도급대금을 지급하여야 한다. 원사업자가 하도급대금을 지급기일까지 지급하지 아니한 경우에는 그 초과기간에 대하여 공정거래위원회가 고시하는 이율(연 15.5%, 2023년 기준)에 따른 이자를 지급하여야 한다.",
-  translation: "하도급 대금은 목적물 수령일로부터 60일 이내 지급 의무. 연체 시 공정위 고시 이율(연 15.5%) 이자 부담.",
-  kt_risk: "Palantir과의 거래에 하도급법 적용 시 TOS §7 월 1.5%(연 18%)보다 낮은 공정위 고시 이율(연 15.5%) 적용 가능. KT 입장에서 하도급법 적용 주장이 유리."
- },
  "LAW-하도급-25조의3": {
   doc: "하도급법",
   section: "하도급거래 공정화에 관한 법률 제25조의3",
@@ -4412,7 +4404,7 @@ ${ktGoals || '(\uba85\uc2dc \uc5c6\uc74c \u2014 KT \uc804\ubc18\uc801 \uc774\uc7
  <div style={{display:'flex', gap:4}}>
  {[['file','\ud83d\udcce \ud30c\uc77c \uc5c5\ub85c\ub4dc'],['text','\u270f\ufe0f \ud14d\uc2a4\ud2b8 \uc785\ub825']].map(([m,label]) => (
  <button key={m} onClick={() => setMode(m)}
- style={{flex:1, padding:'6px 0', borderRadius:4, border:'none',
+ style={{flex:1, padding:'6px 0', borderRadius:4,
  cursor:'pointer', fontSize:10, fontWeight:600, fontFamily:'inherit',
  background: mode===m ? '#1e3a6e' : '#0f0f1a',
  color: mode===m ? '#60a5fa' : '#475569',
