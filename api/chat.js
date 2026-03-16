@@ -88,7 +88,7 @@ export default async function handler(req, res) {
       }
     }
 
-    const tokenLimit = max_tokens || 4096;
+    const tokenLimit = Number(max_tokens) || 4096;
     const legacyPayload = {
       messages: openaiMessages,
       max_tokens: tokenLimit,
@@ -132,6 +132,31 @@ export default async function handler(req, res) {
           }),
         });
         data = await response.json();
+
+        // If the model stops by length and returns empty content, retry once with a larger output budget.
+        const firstChoice = data?.choices?.[0];
+        const maybeEmpty = !firstChoice?.message?.content;
+        if (
+          response.ok &&
+          maybeEmpty &&
+          firstChoice?.finish_reason === 'length'
+        ) {
+          const retryLimit = Math.min(Math.max(tokenLimit * 3, 8192), 16384);
+          response = await fetch(v1Url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'api-key': apiKey,
+            },
+            body: JSON.stringify({
+              ...v1Payload,
+              max_completion_tokens: retryLimit,
+              model,
+            }),
+          });
+          data = await response.json();
+        }
+
         if (response.ok) break;
       }
       usedUrl = v1Url;
