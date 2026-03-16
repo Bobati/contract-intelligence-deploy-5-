@@ -1,10 +1,17 @@
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  const endpoint = (process.env.AZURE_OPENAI_ENDPOINT || '').replace(/\/+$/, '');
+  const endpoint = (process.env.AZURE_OPENAI_ENDPOINT || '')
+    .trim()
+    .replace(/^"|"$/g, '')
+    .replace(/\/+$/, '');
   const apiKey = process.env.AZURE_OPENAI_API_KEY;
-  const deployment = process.env.AZURE_OPENAI_DEPLOYMENT_NAME;
-  const apiVersion = process.env.AZURE_OPENAI_API_VERSION || '2024-02-01';
+  const deployment = (process.env.AZURE_OPENAI_DEPLOYMENT_NAME || '')
+    .trim()
+    .replace(/^"|"$/g, '');
+  const apiVersion = (process.env.AZURE_OPENAI_API_VERSION || '2024-02-01')
+    .trim()
+    .replace(/^"|"$/g, '');
 
   if (!endpoint || !apiKey || !deployment) {
     return res.status(500).json({ error: 'Azure OpenAI 환경변수 미설정', missing: { endpoint: !endpoint, apiKey: !apiKey, deployment: !deployment } });
