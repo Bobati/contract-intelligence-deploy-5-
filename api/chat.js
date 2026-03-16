@@ -23,6 +23,34 @@ export default async function handler(req, res) {
   const legacyUrl = `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
   const v1Url = `${endpoint}/openai/v1/chat/completions`;
 
+  const extractText = (payload) => {
+    const msg = payload?.choices?.[0]?.message?.content;
+    if (typeof msg === 'string' && msg.trim()) return msg;
+    if (Array.isArray(msg)) {
+      const joined = msg
+        .map((p) => (typeof p?.text === 'string' ? p.text : ''))
+        .join('')
+        .trim();
+      if (joined) return joined;
+    }
+
+    if (typeof payload?.output_text === 'string' && payload.output_text.trim()) {
+      return payload.output_text;
+    }
+
+    const outArr = payload?.output;
+    if (Array.isArray(outArr)) {
+      const joined = outArr
+        .flatMap((o) => (Array.isArray(o?.content) ? o.content : []))
+        .map((c) => (typeof c?.text === 'string' ? c.text : ''))
+        .join('')
+        .trim();
+      if (joined) return joined;
+    }
+
+    return '';
+  };
+
   try {
     const { max_tokens, system, messages } = req.body;
 
@@ -102,7 +130,17 @@ export default async function handler(req, res) {
       return res.status(response.status).json({ ...data, _debug_url: usedUrl });
     }
 
-    const content = data.choices?.[0]?.message?.content || data?.output_text || '';
+    const content = extractText(data);
+    if (!content) {
+      return res.status(502).json({
+        error: {
+          code: 'EMPTY_MODEL_OUTPUT',
+          message: '모델 응답이 비어 있습니다. model/response format을 확인하세요.',
+        },
+        _debug_url: usedUrl,
+        _debug_keys: Object.keys(data || {}),
+      });
+    }
     res.status(200).json({
       content: [{ type: 'text', text: content }],
       usage: data.usage,
