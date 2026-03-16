@@ -49,10 +49,15 @@ export default async function handler(req, res) {
       }
     }
 
-    const payload = {
+    const tokenLimit = max_tokens || 4096;
+    const legacyPayload = {
       messages: openaiMessages,
-      max_tokens: max_tokens || 4096,
+      max_tokens: tokenLimit,
       temperature: 0.3,
+    };
+    const v1Payload = {
+      messages: openaiMessages,
+      max_completion_tokens: tokenLimit,
     };
 
     let response = await fetch(legacyUrl, {
@@ -61,7 +66,7 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
         'api-key': apiKey,
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(legacyPayload),
     });
 
     let data = await response.json();
@@ -83,7 +88,7 @@ export default async function handler(req, res) {
             'api-key': apiKey,
           },
           body: JSON.stringify({
-            ...payload,
+            ...v1Payload,
             model,
           }),
         });
