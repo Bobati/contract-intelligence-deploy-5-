@@ -24,14 +24,25 @@ export default async function handler(req, res) {
   const v1Url = `${endpoint}/openai/v1/chat/completions`;
 
   const extractText = (payload) => {
+    const firstChoice = payload?.choices?.[0];
     const msg = payload?.choices?.[0]?.message?.content;
     if (typeof msg === 'string' && msg.trim()) return msg;
+    if (msg && typeof msg === 'object' && typeof msg.text === 'string' && msg.text.trim()) {
+      return msg.text;
+    }
     if (Array.isArray(msg)) {
       const joined = msg
         .map((p) => (typeof p?.text === 'string' ? p.text : ''))
         .join('')
         .trim();
       if (joined) return joined;
+    }
+
+    const refusal = payload?.choices?.[0]?.message?.refusal;
+    if (typeof refusal === 'string' && refusal.trim()) return refusal;
+
+    if (typeof firstChoice?.text === 'string' && firstChoice.text.trim()) {
+      return firstChoice.text;
     }
 
     if (typeof payload?.output_text === 'string' && payload.output_text.trim()) {
@@ -139,6 +150,7 @@ export default async function handler(req, res) {
         },
         _debug_url: usedUrl,
         _debug_keys: Object.keys(data || {}),
+        _debug_choice: data?.choices?.[0] || null,
       });
     }
     res.status(200).json({
