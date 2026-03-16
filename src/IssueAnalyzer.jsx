@@ -149,7 +149,7 @@ export default function IssueAnalyzer() {
  messages:[{role:"user", content: userContent.length > 1 ? userContent : query}]
  })
  });
- if (!res.ok) { const t=await res.text(); throw new Error("API "+res.status+": "+t.slice(0,100)); }
+ if (!res.ok) { const t=await res.text(); throw new Error("API "+res.status+": "+t); }
  const data = await res.json();
  if (data.error) throw new Error(data.error.message||JSON.stringify(data.error));
  const text = data.content?.map(b=>b.text||"").join("").trim();

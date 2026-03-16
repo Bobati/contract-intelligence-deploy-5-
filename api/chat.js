@@ -9,6 +9,9 @@ export default async function handler(req, res) {
   const deployment = (process.env.AZURE_OPENAI_DEPLOYMENT_NAME || '')
     .trim()
     .replace(/^"|"$/g, '');
+  const modelName = (process.env.AZURE_OPENAI_MODEL_NAME || '')
+    .trim()
+    .replace(/^"|"$/g, '');
   const apiVersion = (process.env.AZURE_OPENAI_API_VERSION || '2024-02-01')
     .trim()
     .replace(/^"|"$/g, '');
@@ -66,18 +69,27 @@ export default async function handler(req, res) {
 
     // Some Azure resources only support the newer v1 chat path with model in body.
     if (!response.ok && response.status === 404 && data?.error?.code === 'DeploymentNotFound') {
-      response = await fetch(v1Url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'api-key': apiKey,
-        },
-        body: JSON.stringify({
-          ...payload,
-          model: deployment,
-        }),
-      });
-      data = await response.json();
+      const modelCandidates = [
+        modelName,
+        deployment,
+        deployment.replace(/-\d+$/g, ''),
+      ].filter((v, i, arr) => v && arr.indexOf(v) === i);
+
+      for (const model of modelCandidates) {
+        response = await fetch(v1Url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'api-key': apiKey,
+          },
+          body: JSON.stringify({
+            ...payload,
+            model,
+          }),
+        });
+        data = await response.json();
+        if (response.ok) break;
+      }
       usedUrl = v1Url;
     }
 
