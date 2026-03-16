@@ -17,7 +17,8 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Azure OpenAI 환경변수 미설정', missing: { endpoint: !endpoint, apiKey: !apiKey, deployment: !deployment } });
   }
 
-  const url = `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
+  const legacyUrl = `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
+  const v1Url = `${endpoint}/openai/v1/chat/completions`;
 
   try {
     const { max_tokens, system, messages } = req.body;
@@ -45,26 +46,46 @@ export default async function handler(req, res) {
       }
     }
 
-    const response = await fetch(url, {
+    const payload = {
+      messages: openaiMessages,
+      max_tokens: max_tokens || 4096,
+      temperature: 0.3,
+    };
+
+    let response = await fetch(legacyUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'api-key': apiKey,
       },
-      body: JSON.stringify({
-        messages: openaiMessages,
-        max_tokens: max_tokens || 4096,
-        temperature: 0.3,
-      }),
+      body: JSON.stringify(payload),
     });
 
-    const data = await response.json();
+    let data = await response.json();
+    let usedUrl = legacyUrl;
 
-    if (!response.ok) {
-      return res.status(response.status).json({ ...data, _debug_url: url.replace(apiKey, '***') });
+    // Some Azure resources only support the newer v1 chat path with model in body.
+    if (!response.ok && response.status === 404 && data?.error?.code === 'DeploymentNotFound') {
+      response = await fetch(v1Url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': apiKey,
+        },
+        body: JSON.stringify({
+          ...payload,
+          model: deployment,
+        }),
+      });
+      data = await response.json();
+      usedUrl = v1Url;
     }
 
-    const content = data.choices?.[0]?.message?.content || '';
+    if (!response.ok) {
+      return res.status(response.status).json({ ...data, _debug_url: usedUrl });
+    }
+
+    const content = data.choices?.[0]?.message?.content || data?.output_text || '';
     res.status(200).json({
       content: [{ type: 'text', text: content }],
       usage: data.usage,
