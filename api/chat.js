@@ -1,13 +1,13 @@
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
+  const endpoint = (process.env.AZURE_OPENAI_ENDPOINT || '').replace(/\/+$/, '');
   const apiKey = process.env.AZURE_OPENAI_API_KEY;
   const deployment = process.env.AZURE_OPENAI_DEPLOYMENT_NAME;
   const apiVersion = process.env.AZURE_OPENAI_API_VERSION || '2024-02-01';
 
   if (!endpoint || !apiKey || !deployment) {
-    return res.status(500).json({ error: 'Azure OpenAI 환경변수 미설정' });
+    return res.status(500).json({ error: 'Azure OpenAI 환경변수 미설정', missing: { endpoint: !endpoint, apiKey: !apiKey, deployment: !deployment } });
   }
 
   const url = `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
@@ -54,7 +54,7 @@ export default async function handler(req, res) {
     const data = await response.json();
 
     if (!response.ok) {
-      return res.status(response.status).json(data);
+      return res.status(response.status).json({ ...data, _debug_url: url.replace(apiKey, '***') });
     }
 
     const content = data.choices?.[0]?.message?.content || '';
