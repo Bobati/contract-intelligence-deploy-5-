@@ -2420,7 +2420,7 @@ function ClauseDrawer({ clauseId, onClose }) {
  };
 
  return (
- <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:100,background:"#0a0a14",borderTop:`2px solid ${docColor}44`,boxShadow:"0 -8px 32px #00000088",maxHeight:"50vh",display:"flex",flexDirection:"column"}}>
+ <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:100,background:"#0a0a14",borderTop:`2px solid ${docColor}44`,boxShadow:"0 -8px 32px #00000088",maxHeight:"75vh",display:"flex",flexDirection:"column"}}>
  <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 20px",borderBottom:"1px solid #1a1a2e",flexShrink:0}}>
  <span style={{fontSize:10,fontWeight:700,color:docColor,background:docColor+"18",padding:"2px 8px",borderRadius:3}}>{data?.doc}</span>
  <span style={{fontSize:11,fontWeight:600,color:"#c8d0dc"}}>{data?.section}</span>
@@ -2434,7 +2434,7 @@ function ClauseDrawer({ clauseId, onClose }) {
  )}
  <button onClick={onClose} style={{marginLeft:"auto",background:"none",border:"1px solid #1e2030",borderRadius:4,padding:"3px 10px",fontSize:11,color:"#8899aa",cursor:"pointer",fontFamily:"inherit"}}>{"닫기 ×"}</button>
  </div>
- <div style={{overflowY:"auto",padding:"14px 20px",display:"grid",gridTemplateColumns:(tab==="both"&&hasTranslation)?"1fr 1fr 1fr":"1fr 1fr",gap:16}}>
+ <div style={{overflowY:"auto",padding:"14px 20px",display:"grid",gridTemplateColumns:(tab==="both"&&hasTranslation)?"1fr 1fr 1fr":"1fr 1fr",gap:16,width:"100%",maxWidth:(tab==="ko"||tab==="en")?800:undefined,margin:(tab==="ko"||tab==="en")?"0 auto":undefined}}>
  {(tab==="en"||tab==="both") && (
  <div>
  <div style={{fontSize:10,color:"#6677aa",letterSpacing:"0.08em",marginBottom:8}}>{"조항 원문 (English)"}</div>
@@ -3717,6 +3717,12 @@ return;
  <span style={{fontSize:9, fontWeight:700, color:dc, background:dc+'18',
  padding:'1px 6px', borderRadius:2}}>{linkifyClauses(c.id, onOpenClause)}</span>
  <span style={{fontSize:10, color:'#c8d0dc', fontWeight:600, flex:1}}>{c.topic}</span>
+ <button
+ onClick={()=>onOpenClause && onOpenClause(c.id)}
+ style={{fontSize:10,padding:"2px 8px",background:"none",border:"1px solid #1c2840",borderRadius:3,color:"#4a6080",cursor:"pointer",fontFamily:"inherit"}}
+ >
+ 원문
+ </button>
  {c._amended && <span style={{fontSize:8, color:'#fb923c', background:'#fb923c18',
  padding:'1px 5px', borderRadius:2, fontWeight:700}}>수정됨</span>}
  {c._new && <span style={{fontSize:8, color:'#10b981', background:'#10b98118',
