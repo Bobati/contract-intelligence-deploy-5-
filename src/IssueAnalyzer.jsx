@@ -3719,9 +3719,9 @@ return;
  <span style={{fontSize:10, color:'#c8d0dc', fontWeight:600, flex:1}}>{c.topic}</span>
  <button
  onClick={()=>onOpenClause && onOpenClause(c.id)}
- style={{fontSize:10,padding:"2px 8px",background:"none",border:"1px solid #1c2840",borderRadius:3,color:"#4a6080",cursor:"pointer",fontFamily:"inherit"}}
+ style={{fontSize:10,padding:"2px 8px",background:"#102040",border:"1px solid #3b82f644",borderRadius:3,color:"#93c5fd",cursor:"pointer",fontFamily:"inherit",fontWeight:600,minWidth:56}}
  >
- 원문
+ 원문 보기
  </button>
  {c._amended && <span style={{fontSize:8, color:'#fb923c', background:'#fb923c18',
  padding:'1px 5px', borderRadius:2, fontWeight:700}}>수정됨</span>}
