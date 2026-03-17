@@ -925,6 +925,7 @@ let CLAUSE_FULLTEXT = {
 };
 
 // --- KNOWLEDGE BASE -----------------------------------------------------------
+const KB_VERSION = "2026-03-17-kb-v1";
 let CONTRACT_KB = {
  clauses: [
  { id:"SAA-1.1", doc:"SAA", topic:"계약 목적", core:"Palantir이 KT를 'Palantir Strategic Alliance Partner'로 임명하여 제품/서비스 공동 프로모션 및 GTM 협력", text:"This Agreement sets forth the terms and conditions upon which Palantir appoints Partner as a 'Palantir Strategic Alliance Partner' in order to collaborate on promotion and go-to-market efforts of the Parties' respective products and/or services.", translation:"이 계약은 Palantir이 KT를 'Palantir 전략적 제휴 파트너'로 임명하고, 양사 제품 및 서비스의 홍보와 시장 진출 협력에 관한 조건을 규정한다.", kt_risk:"계약 목적상 KT는 독립 사업자로서 행동해야 하며, Palantir의 대리인이나 대표자로 행동할 권한이 없음.", section:"Section 1.1 (Purpose)", title:"계약 목적" },
@@ -1970,6 +1971,7 @@ const DocDB = {
  DOCS_KEY: "docmgr_docs_v1",
  CLAUSES_KEY: "docmgr_clauses_v1",
  CONFLICTS_KEY: "docmgr_conflicts_v1",
+ VERSION_KEY: "docmgr_kb_version_v1",
 
  async load() {
   const results = {};
@@ -1994,6 +1996,12 @@ const DocDB = {
  },
  async saveConflicts(conflicts) {
   try { await storage.set(this.CONFLICTS_KEY, JSON.stringify(conflicts)); } catch(e) {}
+ },
+ async loadVersion() {
+  try { return await storage.get(this.VERSION_KEY); } catch(e) { return null; }
+ },
+ async saveVersion(version) {
+  try { await storage.set(this.VERSION_KEY, version); } catch(e) {}
  },
 
  // 원문 저장: _rawDocStore(메모리) 우선 + storage 백업
@@ -2028,7 +2036,7 @@ const DocDB = {
  async clear() {
   const { docs } = await this.load();
   if (docs) for (const d of docs) await this.deleteRaw(d.id);
-  for (const k of [this.DOCS_KEY, this.CLAUSES_KEY, this.CONFLICTS_KEY])
+  for (const k of [this.DOCS_KEY, this.CLAUSES_KEY, this.CONFLICTS_KEY, this.VERSION_KEY])
    try { await storage.remove(k); } catch(e) {}
  }
 };
@@ -2091,6 +2099,14 @@ function mergeFulltextToKB() {
 mergeFulltextToKB();
 
 async function loadDynamicKB() {
+ const savedVersion = await DocDB.loadVersion();
+ if (savedVersion !== KB_VERSION) {
+  await DocDB.saveClauses(CONTRACT_KB.clauses);
+  await DocDB.saveConflicts(CONTRACT_KB.conflicts);
+  await DocDB.saveVersion(KB_VERSION);
+  return;
+ }
+
  const { clauses, conflicts } = await DocDB.load();
  if (clauses && clauses.length > 0) {
  CONTRACT_KB.clauses = clauses;
@@ -2594,6 +2610,12 @@ const [expandedPendingRows, setExpandedPendingRows] = useState({});
 
  useEffect(() => {
  (async () => {
+ const savedVersion = await DocDB.loadVersion();
+ if (savedVersion !== KB_VERSION) {
+  await DocDB.saveClauses(CONTRACT_KB.clauses);
+  await DocDB.saveConflicts(CONTRACT_KB.conflicts);
+  await DocDB.saveVersion(KB_VERSION);
+ }
  const { docs: d, clauses: c, conflicts: cf } = await DocDB.load();
  if (d) setDocs(d);
  if (c) { setClauses(c); CONTRACT_KB.clauses = c; }
