@@ -80,7 +80,24 @@ export default function IssueAnalyzer() {
  useEffect(()=>{
  (async()=>{
  try {
- await loadAndApplyStoredPatches();
+ const patchHistory = await loadAndApplyStoredPatches();
+ if (patchHistory && patchHistory.length > 0) {
+ setAmendments(patchHistory.map(h => ({
+ id: h.id,
+ fileName: h.fileName,
+ docType: h.docType,
+ effectiveDate: h.effectiveDate,
+ summary: h.summary,
+ uploadedAt: h.uploadedAt,
+ changes: (h.patches || []).map(p => ({
+ clauseId: p.clauseId,
+ changeType: p.changeType,
+ newText: p.newCore,
+ prevCore: p.prevCore,
+ topic: p.topic,
+ }))
+ })));
+ }
  await loadDynamicKB();
  await loadStoredFullTranslations();
  setKbSummary({ clauses: CONTRACT_KB.clauses.length, conflicts: CONTRACT_KB.conflicts.length });
@@ -349,9 +366,11 @@ export default function IssueAnalyzer() {
  </button>
  </div>
  </div>
- {/* Amendment */}
+ {/* Amendment upload is managed only in 문서 관리 탭 to avoid split state */}
  <div style={{padding:"10px 16px",borderBottom:"1px solid #1c2840"}}>
- <AmendmentManager onAmendmentsChange={handleAmendmentsChange}/>
+ <div style={{fontSize:10,color:"#7a90aa",lineHeight:1.7,border:"1px solid #1c2840",borderRadius:6,padding:"8px 10px",background:"#0a101c"}}>
+ Amendment 업로드는 문서 관리 탭에서만 지원됩니다.
+ </div>
  </div>
  {/* 샘플 이슈 */}
  <div style={{padding:"10px 16px",borderBottom:"1px solid #1c2840"}}>
@@ -913,6 +932,74 @@ let CONTRACT_KB = {
 };
 
 // --- KB PATCH ENGINE ----------------------------------------------------------
+function normalizeClauseKey(v) {
+ return (v || "")
+  .toString()
+  .toLowerCase()
+  .replace(/\bthe\b/g, " ")
+  .replace(/\bsaa\b/g, "saa")
+  .replace(/resale\s*terms?/g, "resale terms")
+  .replace(/[^a-z0-9가-힣]+/g, " ")
+  .replace(/\s+/g, " ")
+  .trim();
+}
+
+function buildClauseAliasMap() {
+ const map = new Map();
+ const add = (alias, id) => {
+  const key = normalizeClauseKey(alias);
+  if (!key || key.length < 4) return;
+  if (!map.has(key)) map.set(key, id);
+ };
+
+ for (const c of CONTRACT_KB.clauses) {
+  add(c.id, c.id);
+  if (c.section) add(c.section, c.id);
+  if (c.title) add(c.title, c.id);
+  if (c.topic) add(c.topic, c.id);
+  if (c.doc && c.section) add(`${c.doc} ${c.section}`, c.id);
+  if (c.doc && c.title) add(`${c.doc} ${c.title}`, c.id);
+ }
+
+ for (const [id, ft] of Object.entries(CLAUSE_FULLTEXT || {})) {
+  add(id, id);
+  if (ft?.section) add(ft.section, id);
+  if (ft?.title) add(ft.title, id);
+  if (ft?.doc && ft?.section) add(`${ft.doc} ${ft.section}`, id);
+  if (ft?.doc && ft?.title) add(`${ft.doc} ${ft.title}`, id);
+ }
+
+ // Frequent title-style aliases that do not look like numeric clause IDs.
+ add("Schedule A", "SAA-APP6");
+ add("Schedule A Resale Terms", "SAA-APP6");
+ add("Resale Terms Appendix 6", "SAA-APP6");
+ add("Resale Terms - Appendix 6", "SAA-APP6");
+ add("Schedule A Resale Terms of the SAA", "SAA-APP6");
+ add("Appendix 6", "SAA-APP6");
+ add("Appendix 7", "SAA-APP7");
+ add("Resale Terms Appendix 7", "SAA-APP7");
+
+ return map;
+}
+
+function resolveClauseId(rawId, docHint) {
+ if (!rawId) return rawId;
+ const exact = CONTRACT_KB.clauses.find(c => c.id === rawId) || CLAUSE_FULLTEXT[rawId];
+ if (exact) return rawId;
+
+ const aliasMap = buildClauseAliasMap();
+ const normalized = normalizeClauseKey(rawId);
+ if (aliasMap.has(normalized)) return aliasMap.get(normalized);
+
+ // Try with doc hint prepended (useful for short section titles).
+ if (docHint) {
+  const hinted = normalizeClauseKey(`${docHint} ${rawId}`);
+  if (aliasMap.has(hinted)) return aliasMap.get(hinted);
+ }
+
+ return rawId;
+}
+
 function shouldPreserveExistingTranslation(existingText, existingTranslation, incomingTranslation, incomingFullText) {
  if (!incomingTranslation) return true;
  const current = (existingTranslation || "").trim();
@@ -924,7 +1011,8 @@ function shouldPreserveExistingTranslation(existingText, existingTranslation, in
 }
 
 function applyPatchesToKB(patches) {
- for (const p of patches) {
+ for (const p0 of patches) {
+ const p = { ...p0, clauseId: resolveClauseId(p0.clauseId, p0.doc) };
  const clause = CONTRACT_KB.clauses.find(c => c.id === p.clauseId);
  if (clause) {
  if (p.changeType === "삭제") {
@@ -1611,6 +1699,120 @@ ${historyText}
 위 분석 결과를 바탕으로 사용자의 추가 질문에 답변하세요. 한국어로 답변하며, 관련 조항이 있으면 조항 ID를 명시하세요. 마크다운은 사용하지 마세요.`;
 }
 
+function buildDocManagerFollowupPrompt(docs, clauses, conflicts, selectedDoc, chatHistory=[]) {
+ const scopedClauses = selectedDoc
+  ? selectedDoc._builtin
+   ? CONTRACT_KB.clauses.filter(c => c.doc === selectedDoc.docType)
+   : clauses.filter(c => c._docId === selectedDoc.id || c._amendedBy === selectedDoc.fileName)
+  : clauses;
+ const clauseLines = scopedClauses.slice(0, 40).map(c => `${c.id} / ${c.doc} / ${c.topic} / ${c.core}`).join("\n");
+ const conflictLines = conflicts.slice(0, 25).map(c => `${c.id} / ${c.risk} / ${c.topic} / ${c.summary}`).join("\n");
+ const docLines = docs.slice(0, 25).map(d => `${d.fileName} / ${d.docType} / clauses=${d.clauseCount||0}`).join("\n");
+ const scopeText = selectedDoc
+  ? (selectedDoc._builtin ? `현재 선택 문서: ${selectedDoc.fileName} (내장 문서)` : `현재 선택 문서: ${selectedDoc.fileName} (${selectedDoc.docType})`)
+  : "현재 선택 문서: 없음 (전체 기준)";
+ const historyText = chatHistory.map(m => `${m.role === "user" ? "사용자" : "AI"}: ${m.content}`).join("\n");
+
+ return `당신은 KT 계약 문서 관리 보조 AI입니다.
+문서 관리 탭에서 사용자의 질문에 답하세요. 질문이 조항/충돌/업로드 이력과 연결되면 근거 ID를 명시하세요.
+
+${scopeText}
+
+[업로드 문서 목록]
+${docLines || "없음"}
+
+[현재 범위 조항]
+${clauseLines || "없음"}
+
+[충돌 목록]
+${conflictLines || "없음"}
+
+[대화 이력]
+${historyText || "없음"}
+
+답변 규칙:
+- 한국어로 간결하고 정확하게 답변
+- 조항을 인용할 때는 반드시 조항 ID를 포함
+- 정보가 부족하면 어떤 문서를 올리면 되는지 구체적으로 안내
+- 마크다운 코드블록은 사용하지 말 것`;
+}
+
+function DocManagerFollowupChat({ docs, clauses, conflicts, selectedDoc, onOpenClause }) {
+ const [messages, setMessages] = useState([]);
+ const [input, setInput] = useState("");
+ const [loading, setLoading] = useState(false);
+ const bottomRef = useRef(null);
+
+ useEffect(() => {
+  bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+ }, [messages]);
+
+ const send = async () => {
+  if (!input.trim() || loading) return;
+  const userMsg = input.trim();
+  setInput("");
+  const next = [...messages, { role: "user", content: userMsg }];
+  setMessages(next);
+  setLoading(true);
+  try {
+   const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+     max_tokens: 1000,
+     system: buildDocManagerFollowupPrompt(docs, clauses, conflicts, selectedDoc, messages),
+     messages: [{ role: "user", content: userMsg }],
+    }),
+   });
+   if (!res.ok) throw new Error("API " + res.status);
+   const data = await res.json();
+   const text = data.content?.map(b => b.text || "").join("").trim() || "응답이 비어 있습니다.";
+   setMessages([...next, { role: "assistant", content: text }]);
+  } catch (e) {
+   setMessages([...next, { role: "assistant", content: "오류가 발생했습니다: " + e.message }]);
+  } finally {
+   setLoading(false);
+  }
+ };
+
+ return (
+  <div style={{ borderTop: "1px solid #1a1a2e", background: "#0a0a14", padding: "10px 12px" }}>
+   <div style={{fontSize:10,color:"#8899aa",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
+    <span style={{width:6,height:6,borderRadius:"50%",background:"#60a5fa",boxShadow:"0 0 6px #60a5fa"}}/>
+    문서관리 추가 질문
+    <span style={{color:"#475569"}}>문서·조항·충돌 상태를 기준으로 답변합니다</span>
+   </div>
+   {messages.length > 0 && (
+    <div style={{ maxHeight: 200, overflowY: "auto", padding: "0 0 8px", display: "flex", flexDirection: "column", gap: 7 }}>
+     {messages.map((m, i) => (
+      <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
+       <div style={{ maxWidth: "88%", padding: "7px 10px", borderRadius: 6, background: m.role === "user" ? "#0f1e35" : "#0f0f1a", border: `1px solid ${m.role === "user" ? "#1e3a5f" : "#1e2030"}`, fontSize: 11, color: "#c8d0dc", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
+        {m.content.split("\n").map((line, idx) => (
+         <span key={idx}>{linkifyClauses(line, onOpenClause)}{idx < m.content.split("\n").length - 1 && <br/>}</span>
+        ))}
+       </div>
+      </div>
+     ))}
+     {loading && <div style={{display:"flex",justifyContent:"flex-start"}}><div style={{background:"#0f0f1a",border:"1px solid #1e2030",borderRadius:6,padding:"4px 8px"}}><TypingDots/></div></div>}
+     <div ref={bottomRef} />
+    </div>
+   )}
+   <div style={{ display: "flex", gap: 8 }}>
+    <input
+     value={input}
+     onChange={e => setInput(e.target.value)}
+     onKeyDown={e => e.key === "Enter" && !e.shiftKey && send()}
+     placeholder="문서관리 상태에 대해 추가 질문..."
+     style={{ flex: 1, background: "#07070f", border: "1px solid #1e2030", borderRadius: 4, padding: "7px 10px", fontSize: 11, color: "#e2e8f0", fontFamily: "inherit", outline: "none" }}
+    />
+    <button onClick={send} disabled={!input.trim() || loading} style={{padding:"7px 12px",background:input.trim()&&!loading?"#1e3a6e":"#0f1525",border:`1px solid ${input.trim()&&!loading?"#60a5fa44":"#1e2030"}`,borderRadius:4,fontSize:11,color:input.trim()&&!loading?"#60a5fa":"#6677aa",cursor:input.trim()&&!loading?"pointer":"not-allowed",fontFamily:"inherit"}}>
+     전송
+    </button>
+   </div>
+  </div>
+ );
+}
+
 // --- DOCUMENT MANAGEMENT SYSTEM -----------------------------------------------
 
 const DOC_TYPES = {
@@ -1623,25 +1825,34 @@ const DOC_TYPES = {
  OTHER: { label:"기타", color:"#8899aa", desc:"기타 문서" },
 };
 
-const CONFLICT_CHECK_PROMPT = (clauses) => {
+const CONFLICT_CHECK_PROMPT = (clauses, options = {}) => {
+ const focusClauseIds = Array.isArray(options.focusClauseIds) ? options.focusClauseIds.filter(Boolean) : [];
  const clauseLines = clauses.map(c => {
- const core = (c.core || '').replace(/[\r\n\t"]/g, ' ').slice(0, 80);
+ const core = (c.core || '').replace(/[\r\n\t"]/g, ' ').slice(0, 140);
  const topic = (c.topic || '').replace(/[\r\n\t"]/g, ' ').slice(0, 30);
  return '[' + c.id + '] ' + (c.doc || '') + ' | ' + topic + ' | ' + core;
  }).join('\n');
+ const focusNote = focusClauseIds.length > 0
+  ? ('\n중요 범위 제한:\n- 아래 변경 조항 ID가 최소 1개 포함된 충돌만 반환\n- 변경 조항끼리의 충돌은 제외\n- 즉, "변경 조항" vs "기타 조항" 충돌만 반환\n변경 조항 ID: ' + focusClauseIds.join(', ') + '\n')
+  : '';
  return '당신은 KT x Palantir Korea 계약 전문가입니다.\n' +
- '아래 조항 목록에서 조항 간 충돌을 찾아내시오.\n' +
+ '아래 조항 목록에서 조항 간 충돌을 찾아내시오. 단순 나열이 아니라 왜 충돌인지 근거를 구체적으로 써라.\n' +
  'Markdown 백틱 없이 순수 JSON 배열만 출력.\n\n' +
  '조항 목록:\n' + clauseLines + '\n\n' +
+ focusNote + '\n' +
  '출력 형식:\n[\n' +
  ' {\n' +
  ' "id": "XC-001",\n' +
  ' "risk": "HIGH|MEDIUM|LOW",\n' +
  ' "topic": "충돌 주제 20자 이내",\n' +
- ' "summary": "A조항 vs B조항 충돌 설명 80자 이내",\n' +
+ ' "summary": "A조항 vs B조항의 충돌 요약",\n' +
+ ' "why": "어느 문구가 어떻게 모순되는지 구체 설명",\n' +
+ ' "impact": "실무상 영향(협상/해지/정산/위험) 한 문장",\n' +
+ ' "resolution": "우선 적용 기준 또는 권고 조치",\n' +
  ' "clauseIds": ["SAA-6.2", "TOS-8.2"]\n' +
  ' }\n]\n\n' +
- '규칙: 기존 ID(XC-,IC-,EC-) 유지. 신규는 XC-NEW-001. 충돌없으면 [] 반환.';
+ '규칙: 기존 ID(XC-,IC-,EC-) 유지. 신규는 XC-NEW-001. 충돌없으면 [] 반환.\n' +
+ '규칙: clauseIds는 반드시 2개 이상, summary/why/impact/resolution은 일반론 금지.';
 };
 
 const CLAUSE_EXTRACT_PROMPT = (docType, fileName) => `당신은 계약서 분석 전문가입니다.
@@ -1733,6 +1944,53 @@ const DocDB = {
    try { await storage.remove(k); } catch(e) {}
  }
 };
+
+async function extractPdfText(file, onProgress) {
+ try {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const ab = await file.arrayBuffer();
+  const loadingTask = pdfjs.getDocument({ data: ab, disableWorker: true });
+  const pdf = await loadingTask.promise;
+  const pages = [];
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+   const page = await pdf.getPage(pageNum);
+   const content = await page.getTextContent();
+   const text = (content.items || []).map(i => i.str || "").join(" ");
+   if (text.trim()) pages.push(text.trim());
+   if (onProgress) onProgress({ phase: "text", page: pageNum, total: pdf.numPages });
+  }
+  const merged = pages.join("\n\n").trim();
+  if (merged.length >= 300) return merged;
+
+  // OCR fallback for scanned/image-only PDFs
+  if (onProgress) onProgress({ phase: "ocr-init", page: 0, total: Math.min(pdf.numPages, 8) });
+  const { createWorker } = await import("tesseract.js");
+  const worker = await createWorker("eng");
+  const ocrPages = [];
+  const maxPages = Math.min(pdf.numPages, 8);
+  for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+   const page = await pdf.getPage(pageNum);
+   const viewport = page.getViewport({ scale: 1.8 });
+   const canvas = document.createElement("canvas");
+   const ctx = canvas.getContext("2d");
+   canvas.width = Math.floor(viewport.width);
+   canvas.height = Math.floor(viewport.height);
+   await page.render({ canvasContext: ctx, viewport }).promise;
+   const imageData = canvas.toDataURL("image/png");
+   const out = await worker.recognize(imageData);
+   const t = out?.data?.text || "";
+   if (t.trim()) ocrPages.push(t.trim());
+   if (onProgress) onProgress({ phase: "ocr", page: pageNum, total: maxPages });
+  }
+  await worker.terminate();
+
+  const ocrMerged = ocrPages.join("\n\n").trim();
+  return ocrMerged || merged;
+ } catch (e) {
+  return "";
+ }
+}
+
 function mergeFulltextToKB() {
  for (const c of CONTRACT_KB.clauses) {
   const ft = CLAUSE_FULLTEXT[c.id];
@@ -1848,6 +2106,18 @@ function linkifyClauses(text, onOpen) {
  for (const alias of appendixAlias[id]) patterns.push({ pat: alias, id });
  }
  }
+
+ const titleAliases = [
+  { pat: "Schedule A", id: "SAA-APP6" },
+  { pat: "SCHEDULE A", id: "SAA-APP6" },
+  { pat: "Schedule A, Resale Terms", id: "SAA-APP6" },
+  { pat: "Schedule A, Resale Terms of the SAA", id: "SAA-APP6" },
+  { pat: "Resale Terms - Appendix 6", id: "SAA-APP6" },
+  { pat: "Resale Terms Appendix 6", id: "SAA-APP6" },
+  { pat: "Resale Terms - Appendix 7", id: "SAA-APP7" },
+  { pat: "Resale Terms Appendix 7", id: "SAA-APP7" },
+ ];
+ patterns.push(...titleAliases);
  patterns.sort((a,b) => b.pat.length - a.pat.length);
 
  let segs = [{ text, matched: false }];
@@ -2229,6 +2499,10 @@ function DocumentManagerTab({ onKBUpdated, onAmendmentsFromUpload, onOpenClause 
  const [showClauses, setShowClauses] = useState(false);
  const fileRef = useRef(null);
  const [newDocType, setNewDocType] = useState("SAA");
+ const [pendingAmendment, setPendingAmendment] = useState(null);
+const [applyGuardChecked, setApplyGuardChecked] = useState(false);
+const [expandedPendingRows, setExpandedPendingRows] = useState({});
+ const [conflictScope, setConflictScope] = useState('all');
 
  useEffect(() => {
  (async () => {
@@ -2275,7 +2549,113 @@ function DocumentManagerTab({ onKBUpdated, onAmendmentsFromUpload, onOpenClause 
  const ext = file.name.split('.').pop().toLowerCase();
  if (!['pdf','docx','doc','txt'].includes(ext)) return;
  setUploading(true);
+ setChecking(false);
+ setConflictStatus(null);
+ setRightView('clauses');
  setUploadStatus({ name: file.name, status: 'extracting', msg: 'AI가 조항 추출 중...' });
+
+ const extractBalancedJson = (text, openChar) => {
+  const closeChar = openChar === '{' ? '}' : ']';
+  const start = text.indexOf(openChar);
+  if (start < 0) return null;
+  let depth = 0;
+  let inStr = false;
+  let quote = '';
+  let esc = false;
+  for (let i = start; i < text.length; i++) {
+   const ch = text[i];
+   if (inStr) {
+    if (esc) esc = false;
+    else if (ch === '\\') esc = true;
+    else if (ch === quote) { inStr = false; quote = ''; }
+    continue;
+   }
+   if (ch === '"' || ch === "'" || ch === '`') { inStr = true; quote = ch; continue; }
+   if (ch === openChar) depth++;
+   else if (ch === closeChar) {
+    depth--;
+    if (depth === 0) return text.slice(start, i + 1);
+   }
+  }
+  return null;
+ };
+
+ const parseAmendmentPayload = (text) => {
+  const cleaned = (text || '').replace(/[\x60]{3}json|[\x60]{3}/g, '').trim();
+  const candidates = [cleaned, extractBalancedJson(cleaned, '{')].filter(Boolean);
+  for (const c of candidates) {
+   try {
+    const parsed = JSON.parse(c);
+    if (parsed && Array.isArray(parsed.patches)) return parsed;
+    if (parsed?.result && Array.isArray(parsed.result.patches)) return parsed.result;
+    if (parsed?.data && Array.isArray(parsed.data.patches)) return parsed.data;
+   } catch (e) {}
+  }
+  return null;
+ };
+
+ const parseClauseArrayPayload = (text) => {
+  const cleaned = (text || '').replace(/[\x60]{3}json|[\x60]{3}/g, '').trim();
+  const arr = extractBalancedJson(cleaned, '[');
+  if (arr) {
+   try { return JSON.parse(arr); } catch (e) {}
+  }
+  const obj = extractBalancedJson(cleaned, '{');
+  if (obj) {
+   try {
+    const parsed = JSON.parse(obj);
+    if (Array.isArray(parsed)) return parsed;
+    if (Array.isArray(parsed?.clauses)) return parsed.clauses;
+   } catch (e) {}
+  }
+  return null;
+ };
+
+   const splitAmendmentChunks = (text, size = 2000, overlap = 250) => {
+    const src = (text || "").replace(/\r\n/g, "\n").trim();
+    if (!src) return [];
+    if (src.length <= size) return [src];
+    const chunks = [];
+    let start = 0;
+    while (start < src.length) {
+     let end = Math.min(src.length, start + size);
+     const windowText = src.slice(start, end);
+     const paraBreak = windowText.lastIndexOf("\n\n");
+     const lineBreak = windowText.lastIndexOf("\n");
+     if (paraBreak > Math.floor(size * 0.55)) end = start + paraBreak;
+     else if (lineBreak > Math.floor(size * 0.7)) end = start + lineBreak;
+     const piece = src.slice(start, end).trim();
+     if (piece) chunks.push(piece);
+     if (end >= src.length) break;
+     start = Math.max(0, end - overlap);
+    }
+    return chunks;
+   };
+
+   const mergeExtractedClauses = (rows) => {
+    const byId = new Map();
+    for (const r of rows) {
+     const id = r.id;
+     if (!id) continue;
+     if (!byId.has(id)) {
+      byId.set(id, r);
+      continue;
+     }
+     const prev = byId.get(id);
+     const pickLonger = (a, b) => ((b || "").length > (a || "").length ? b : a);
+     byId.set(id, {
+      ...prev,
+      topic: pickLonger(prev.topic, r.topic),
+      core: pickLonger(prev.core, r.core),
+      text: pickLonger(prev.text, r.text),
+      translation: pickLonger(prev.translation, r.translation),
+      context: pickLonger(prev.context, r.context),
+      doc: prev.doc || r.doc,
+      _changeType: prev._changeType || r._changeType,
+     });
+    }
+    return Array.from(byId.values());
+   };
 
  try {
  let textContent = null, b64 = null, isPDF = false;
@@ -2285,6 +2665,15 @@ function DocumentManagerTab({ onKBUpdated, onAmendmentsFromUpload, onOpenClause 
  r.onload = () => res(r.result.split(',')[1]);
  r.onerror = rej;
  r.readAsDataURL(file);
+ });
+ textContent = await extractPdfText(file, ({ phase, page, total }) => {
+  if (phase === 'text') {
+   setUploadStatus({ name: file.name, status: 'extracting', msg: `PDF 텍스트 추출 중... (${page}/${total})` });
+  } else if (phase === 'ocr-init') {
+   setUploadStatus({ name: file.name, status: 'extracting', msg: '스캔 PDF 감지 — OCR 추출 시작...' });
+  } else if (phase === 'ocr') {
+   setUploadStatus({ name: file.name, status: 'extracting', msg: `OCR 추출 중... (${page}/${total})` });
+  }
  });
  isPDF = true;
  } else if (ext === 'docx' || ext === 'doc') {
@@ -2298,41 +2687,296 @@ function DocumentManagerTab({ onKBUpdated, onAmendmentsFromUpload, onOpenClause 
  textContent = await file.text();
  }
 
- const prompt = CLAUSE_EXTRACT_PROMPT(newDocType, file.name);
- const msgContent = isPDF
- ? [{ type:'document', source:{ type:'base64', media_type:'application/pdf', data:b64 }},
- { type:'text', text: prompt }]
- : prompt + '\n\n===문서 내용===\n' + (textContent||'').slice(0, 12000);
+ let amendmentMeta = null;
+ let extracted = null;
+ const hasPdfText = isPDF && (textContent || '').trim().length > 120;
 
- const resp = await fetch('/api/chat', {
- method:'POST', headers:{'Content-Type':'application/json'},
- body: JSON.stringify({ max_tokens:8000,
- messages:[{ role:'user', content: msgContent }] })
- });
- const data = await resp.json();
- const raw = data.content?.map(c => c.text||'').join('') || '';
- let json = raw.replace(/[\x60]{3}json|[\x60]{3}/g,'').trim();
- if (!json.endsWith(']')) {
- const lastComplete = json.lastIndexOf('},');
- const lastObj = json.lastIndexOf('}');
- const cut = lastObj > lastComplete ? lastObj + 1 : lastComplete + 1;
- json = json.slice(0, cut).trimEnd().replace(/,$/, '') + ']';
- }
- const _js = json.indexOf('['), _je = json.lastIndexOf(']');
- if (_js !== -1 && _je > _js) json = json.slice(_js, _je + 1);
- json = json.replace(/[-\x1f]/g, m => m === '\n' || m === '\t' ? m : ' ');
- let extracted;
- try {
- extracted = JSON.parse(json);
- } catch(parseErr) {
- const objMatches = json.match(/\{[^{}]+\}/g) || [];
- extracted = objMatches.map(o => { try { return JSON.parse(o); } catch(e){ return null; } }).filter(Boolean);
- if (extracted.length === 0) throw new Error('JSON 파싱 실패: ' + parseErr.message);
+ if (newDocType === 'AMD' && (textContent || '').trim().length > 0) {
+  const kbRefs = CONTRACT_KB.clauses
+  .slice(0, 500)
+  .map(c => `${c.id} | ${c.doc} | ${c.topic}`)
+  .join('\n');
+  const chunks = splitAmendmentChunks((textContent || '').slice(0, 50000), 2000, 260);
+  const chunkRows = [];
+
+  for (let i = 0; i < chunks.length; i++) {
+  const chunk = chunks[i];
+  setUploadStatus({ name: file.name, status: 'extracting', msg: `Amendment 청크 추출 중... (${i + 1}/${chunks.length})` });
+  const chunkPrompt = `다음 Amendment 텍스트 청크를 분석해 JSON 객체 하나만 출력하시오.
+
+반드시 아래 순서를 지킬 것:
+1) 청크 내에 등장하는 조항 식별자(Article, Section, §, 제N조, Schedule, Appendix)를 먼저 찾는다.
+2) 식별자별로 변경 내용을 정리한다.
+3) 아래 기존 조항 목록과 대조해 기존 조항이면 changeType="수정", 목록에 없는 신규면 changeType="신규"로 표시한다.
+
+기존 조항 목록:
+${kbRefs}
+
+출력 JSON 스키마:
+{
+ "docType": "Amendment",
+ "effectiveDate": null,
+ "summary": "청크 요약",
+ "patches": [
+  {
+  "clauseId": "기존 조항 ID 또는 신규 식별자",
+  "changeType": "수정|신규",
+  "doc": "SAA|TOS|OF3|OF4|AMD",
+  "newTopic": "변경 주제",
+  "newCore": "변경 핵심",
+  "newFullText": "변경 조항 원문",
+  "newTranslation": "변경 조항 한국어 전문 번역",
+  "newContext": "변경 맥락"
+  }
+ ]
+}
+
+중요:
+- JSON 이외 텍스트 금지
+- patches 누락 금지(없으면 빈 배열)
+
+=== Amendment 청크 (${i + 1}/${chunks.length}) ===
+${chunk}`;
+
+  const cResp = await fetch('/api/chat', {
+   method:'POST', headers:{'Content-Type':'application/json'},
+   body: JSON.stringify({ max_tokens: 3500, messages:[{ role:'user', content: chunkPrompt }] })
+  });
+  const cData = await cResp.json();
+  const cRaw = cData.content?.map(c => c.text || '').join('') || '';
+  const parsed = parseAmendmentPayload(cRaw);
+  if (!parsed || !Array.isArray(parsed.patches)) continue;
+
+  for (const p of parsed.patches) {
+   const resolvedId = resolveClauseId(p.clauseId || '', p.doc);
+   const prev = clauses.find(c => c.id === resolvedId) || CONTRACT_KB.clauses.find(c => c.id === resolvedId);
+   const normalizedChange = prev ? '수정' : '신규';
+   chunkRows.push({
+    id: resolvedId || p.clauseId || `AMD-${Date.now()}-${i + 1}`,
+    doc: p.doc || prev?.doc || 'AMD',
+    topic: p.newTopic || p.topic || prev?.topic || '변경 조항',
+    core: p.newCore || p.newText || prev?.core || '',
+    text: p.newFullText || p.newText || prev?.text || p.newCore || '',
+    translation: p.newTranslation || prev?.translation || '',
+    context: p.newContext || prev?.context || '',
+    section: prev?.section || resolvedId || p.clauseId,
+    title: prev?.title || p.newTopic || p.topic || 'Amendment',
+    kt_risk: prev?.kt_risk || '',
+    _changeType: normalizedChange,
+   });
+  }
+  }
+
+  const merged = mergeExtractedClauses(chunkRows);
+  if (merged.length > 0) {
+  extracted = merged;
+  amendmentMeta = {
+   docType: 'Amendment',
+   effectiveDate: null,
+   summary: `${file.name} 청크 추출 완료 (${chunks.length}개 청크, ${merged.length}개 조항)`,
+  };
+  }
  }
 
  if (!Array.isArray(extracted) || extracted.length === 0) {
- setUploadStatus({ name: file.name, status:'warn', msg:'추출된 조항 없음' });
+  const prompt = newDocType === 'AMD' ? AMENDMENT_PARSE_PROMPT : CLAUSE_EXTRACT_PROMPT(newDocType, file.name);
+  const msgContent = hasPdfText
+   ? prompt + '\n\n===문서 내용===\n' + (textContent||'').slice(0, 50000)
+  : isPDF
+  ? [{ type:'document', source:{ type:'base64', media_type:'application/pdf', data:b64 }},
+    { type:'text', text: prompt }]
+    : prompt + '\n\n===문서 내용===\n' + (textContent||'').slice(0, 50000);
+
+  const resp = await fetch('/api/chat', {
+  method:'POST', headers:{'Content-Type':'application/json'},
+  body: JSON.stringify({ max_tokens:8000,
+  messages:[{ role:'user', content: msgContent }] })
+  });
+  const data = await resp.json();
+  const raw = data.content?.map(c => c.text||'').join('') || '';
+
+ if (newDocType === 'AMD') {
+  amendmentMeta = parseAmendmentPayload(raw);
+  if (amendmentMeta && Array.isArray(amendmentMeta.patches) && amendmentMeta.patches.length > 0) {
+   extracted = amendmentMeta.patches.map((p, idx) => {
+    const clauseId = resolveClauseId(p.clauseId || `AMD-${Date.now()}-${idx+1}`, p.doc);
+    const prev = clauses.find(c => c.id === clauseId) || CONTRACT_KB.clauses.find(c => c.id === clauseId);
+    const normalizedChange = prev ? '수정' : '신규';
+    return {
+     id: clauseId,
+     doc: p.doc || prev?.doc || 'AMD',
+     topic: p.newTopic || p.topic || prev?.topic || '변경 조항',
+     core: p.newCore || p.newText || prev?.core || '',
+     text: p.newFullText || p.newText || prev?.text || p.newCore || '',
+     kt_risk: prev?.kt_risk || '',
+     section: prev?.section || clauseId,
+     title: prev?.title || p.newTopic || p.topic || 'Amendment',
+     translation: p.newTranslation || prev?.translation || '',
+     context: p.newContext || prev?.context || '',
+    _changeType: normalizedChange,
+    };
+   }).filter(e => e.id && (e.core || e.text));
+  }
+ }
+
+ if (!Array.isArray(extracted)) {
+  extracted = parseClauseArrayPayload(raw);
+  if (!Array.isArray(extracted)) extracted = [];
+ }
+
+ // 모델이 { clauses:[...] } 형태를 반환한 경우도 허용
+ if (!Array.isArray(extracted) && extracted && Array.isArray(extracted.clauses)) {
+ extracted = extracted.clauses;
+ }
+
+ // Amendment 업로드 시, 일반 조항 추출이 비어 있으면 전용 패치 파서를 한 번 더 시도
+ if (newDocType === 'AMD' && (!Array.isArray(extracted) || extracted.length === 0)) {
+ const strictRetryPrompt = AMENDMENT_PARSE_PROMPT + "\n\n중요: 반드시 JSON 객체 하나만 출력하고 patches 배열에 변경 조항을 가능한 한 모두 포함하시오. 설명문/마크다운 금지.";
+ const amdMsgContent = hasPdfText
+  ? strictRetryPrompt + '\n\n===문서 내용===\n' + (textContent||'').slice(0, 12000)
+  : isPDF
+   ? [
+      { type:'document', source:{ type:'base64', media_type:'application/pdf', data:b64 } },
+      { type:'text', text: strictRetryPrompt }
+     ]
+   : strictRetryPrompt + '\n\n===문서 내용===\n' + (textContent||'').slice(0, 12000);
+
+ const amdResp = await fetch('/api/chat', {
+  method:'POST', headers:{'Content-Type':'application/json'},
+  body: JSON.stringify({ max_tokens:8000, messages:[{ role:'user', content: amdMsgContent }] })
+ });
+ const amdData = await amdResp.json();
+ const amdRaw = amdData.content?.map(c => c.text||'').join('') || '';
+ const amdParsed = parseAmendmentPayload(amdRaw);
+
+ if (amdParsed && Array.isArray(amdParsed.patches) && amdParsed.patches.length > 0) {
+  amendmentMeta = amdParsed;
+  extracted = amdParsed.patches.map((p, idx) => {
+  const clauseId = resolveClauseId(p.clauseId || `AMD-${Date.now()}-${idx+1}`, p.doc);
+   const prev = clauses.find(c => c.id === clauseId) || CONTRACT_KB.clauses.find(c => c.id === clauseId);
+   const newText = p.newText || p.newCore || prev?.text || prev?.core || '';
+    const normalizedChange = prev ? '수정' : '신규';
+   return {
+    id: clauseId,
+    doc: prev?.doc || 'AMD',
+    topic: p.topic || prev?.topic || '변경 조항',
+    core: p.newCore || p.newText || prev?.core || '',
+    text: newText,
+    kt_risk: prev?.kt_risk || '',
+    section: prev?.section || clauseId,
+    title: prev?.title || p.topic || 'Amendment',
+    translation: p.newTranslation || prev?.translation || '',
+    context: prev?.context || '',
+    _changeType: normalizedChange,
+   };
+  }).filter(e => e.id && (e.core || e.text));
+ }
+
+ // 마지막 안전장치: JSON이 계속 실패하면 라인 포맷으로 강제 추출
+ if (!Array.isArray(extracted) || extracted.length === 0) {
+  const linePrompt = `다음 문서에서 Amendment 변경 조항을 가능한 많이 추출하시오.
+출력은 반드시 아래 라인 포맷만 사용:
+clauseId||changeType||doc||topic||newCore
+
+규칙:
+- 한 줄에 한 조항
+- changeType은 수정|추가|삭제|대체 중 하나
+- clauseId를 모르면 AMD-임시-번호 사용
+- 다른 설명 문장 금지`;
+
+  const lineMsgContent = hasPdfText
+   ? linePrompt + '\n\n===문서 내용===\n' + (textContent||'').slice(0, 14000)
+   : isPDF
+    ? [
+       { type:'document', source:{ type:'base64', media_type:'application/pdf', data:b64 } },
+       { type:'text', text: linePrompt }
+      ]
+    : linePrompt + '\n\n===문서 내용===\n' + (textContent||'').slice(0, 14000);
+
+  const lineResp = await fetch('/api/chat', {
+   method:'POST', headers:{'Content-Type':'application/json'},
+   body: JSON.stringify({ max_tokens:3000, messages:[{ role:'user', content: lineMsgContent }] })
+  });
+  const lineData = await lineResp.json();
+  const lineRaw = lineData.content?.map(c => c.text||'').join('') || '';
+  const lines = lineRaw
+   .split(/\r?\n/)
+   .map(s => s.trim())
+   .filter(s => s && s.includes('||') && !s.startsWith('```'));
+
+  const parsedLines = lines.map((line, idx) => {
+   const parts = line.split('||').map(s => (s || '').trim());
+   if (parts.length < 5) return null;
+   const [clauseIdRaw, changeTypeRaw, docRaw, topicRaw, coreRaw] = parts;
+  const clauseId = resolveClauseId(clauseIdRaw || `AMD-${Date.now()}-${idx+1}`, docRaw);
+   const prev = clauses.find(c => c.id === clauseId) || CONTRACT_KB.clauses.find(c => c.id === clauseId);
+   const changeType = /수정|추가|삭제|대체/.test(changeTypeRaw) ? changeTypeRaw.match(/수정|추가|삭제|대체/)[0] : (prev ? '수정' : '추가');
+   return {
+    id: clauseId,
+    doc: docRaw || prev?.doc || 'AMD',
+    topic: topicRaw || prev?.topic || '변경 조항',
+    core: coreRaw || prev?.core || '',
+    text: prev?.text || coreRaw || '',
+    kt_risk: prev?.kt_risk || '',
+    section: prev?.section || clauseId,
+    title: prev?.title || topicRaw || 'Amendment',
+    translation: prev?.translation || '',
+    context: prev?.context || '',
+    _lineExtracted: true,
+    _lineChangeType: changeType,
+    _changeType: changeType === '추가' ? '신규' : changeType,
+   };
+  }).filter(Boolean);
+
+  if (parsedLines.length > 0) {
+   extracted = parsedLines;
+   amendmentMeta = amendmentMeta || {
+    docType: 'Amendment',
+    effectiveDate: null,
+    summary: `${file.name} 업로드 — 라인 파서로 ${parsedLines.length}개 조항 추출`,
+   };
+  }
+ }
+ }
+ }
+
+ if (!Array.isArray(extracted) || extracted.length === 0) {
+ setUploadStatus({ name: file.name, status:'warn', msg: hasPdfText ? '추출된 조항 없음 (파싱 규칙 불일치)' : '추출된 조항 없음 (PDF 본문 인식 실패 가능)' });
  setUploading(false); return;
+ }
+
+ const rawData = isPDF
+  ? { type: "pdf", b64, mediaType: "application/pdf" }
+  : { type: "text", text: (textContent||"").slice(0, 80000) };
+
+ if (newDocType === 'AMD') {
+  setShowUploadPanel(true);
+  setPendingAmendment({
+   fileName: file.name,
+   fileSize: file.size,
+   extracted: extracted.map((ec, idx) => {
+    const prev = clauses.find(c => c.id === ec.id) || CONTRACT_KB.clauses.find(c => c.id === ec.id);
+    const nextType = ec._changeType || ec._lineChangeType || (prev ? '수정' : '신규');
+    const suspicious = !ec.id || ec.id.startsWith('AMD-') || (ec.core || '').trim().length < 16;
+    return {
+     ...ec,
+     _reviewId: `${ec.id || 'NOID'}-${idx}`,
+     _selected: true,
+     _prevCore: prev?.core || '',
+     _prevTopic: prev?.topic || '',
+     _prevExists: !!prev,
+     _changeType: nextType,
+     _suspicious: suspicious,
+    };
+   }),
+   amendmentMeta,
+   rawData,
+  });
+  setExpandedPendingRows({});
+  setApplyGuardChecked(false);
+  setUploadStatus({ name: file.name, status:'ok', msg: `${extracted.length}개 조항 추출 완료 — 검토 후 반영하세요` });
+  setUploading(false);
+  return;
  }
 
  const docEntry = {
@@ -2342,86 +2986,27 @@ function DocumentManagerTab({ onKBUpdated, onAmendmentsFromUpload, onOpenClause 
  uploadedAt: new Date().toLocaleString('ko-KR'),
  clauseCount: extracted.length,
  fileSize: file.size,
- isAmendment: newDocType === 'AMD',
- amendedDocId: null, // Amendment인 경우 원본 문서 ID
+ isAmendment: false,
+ amendedDocId: null,
  };
  // 원문 저장 (이슈 분석 시 직접 첨부용)
- const rawData = isPDF
-  ? { type: "pdf", b64, mediaType: "application/pdf" }
-  : { type: "text", text: (textContent||"").slice(0, 80000) };
  await DocDB.saveRaw(docEntry.id, rawData);
 
  let newClauses;
- if (newDocType === 'AMD') {
- newClauses = [...clauses];
- for (const ec of extracted) {
- const idx = newClauses.findIndex(c => c.id === ec.id);
- if (idx >= 0) {
- newClauses[idx] = { ...ec, _amended:true, _amendedBy: file.name, _prevCore: newClauses[idx].core };
- } else {
- newClauses.push({ ...ec, _new:true, _amendedBy: file.name });
- }
- }
- } else {
  const sameDocIds = docs.filter(d=>d.docType===newDocType).map(d=>d.id);
  const docsToRemove = docs.filter(d=>d.docType===newDocType&&d.id!==docEntry.id).map(d=>d.id);
  newClauses = clauses.filter(c => !docsToRemove.includes(c._docId)).concat(
  extracted.map(e => ({ ...e, _docId: docEntry.id }))
  );
- }
 
- const newDocs = [docEntry, ...docs.filter(d => newDocType==='AMD' ? true : d.docType !== newDocType)];
+ const newDocs = [docEntry, ...docs.filter(d => d.docType !== newDocType)];
  const newConflicts = conflicts; // 충돌은 별도로 재검토
 
  setClauses(newClauses);
  setDocs(newDocs);
  await syncKB(newClauses, newConflicts, newDocs);
 
- setUploadStatus({ name: file.name, status:'ok',
- msg: `${extracted.length}개 조항 추출 완료${newDocType==='AMD'?' — 충돌 재검토 권장':''}` });
-
- if (newDocType === 'AMD') {
- const ts = new Date().toLocaleString('ko-KR');
- const amdPatches = extracted.map(ec => {
- const prev = clauses.find(c => c.id === ec.id);
- return {
- clauseId: ec.id,
- changeType: prev ? '수정' : '추가',
- prevCore: prev?.core || null,
- newCore: ec.core,
- topic: ec.topic,
- amendedBy: `${file.name} (${ts})`,
- };
- });
- const amdEntry = {
- id: Date.now(),
- fileName: file.name,
- uploadedAt: ts,
- docType: 'Amendment',
- effectiveDate: null,
- summary: `${file.name} 업로드 — ${amdPatches.length}개 조항 변경`,
- patches: amdPatches,
- };
- try {
- const stored = await storage.get('kb_patches_v1');
- const existing = stored?.value ? JSON.parse(stored.value) : [];
- const nextPatches = [amdEntry, ...existing].slice(0, 30);
- await storage.set('kb_patches_v1', JSON.stringify(nextPatches));
- if (onAmendmentsFromUpload) {
- onAmendmentsFromUpload(nextPatches.map(h => ({
- id: h.id, fileName: h.fileName, docType: h.docType,
- effectiveDate: h.effectiveDate, summary: h.summary,
- uploadedAt: h.uploadedAt,
- changes: h.patches.map(p => ({
- clauseId: p.clauseId, changeType: p.changeType,
- newText: p.newCore, prevCore: p.prevCore, topic: p.topic
- }))
- })));
- }
- } catch(e) { console.warn('patchHistory 저장 실패:', e); }
-
- await runConflictCheck(newClauses);
- }
+ setUploadStatus({ name: file.name, status:'ok', msg: `${extracted.length}개 조항 추출 완료` });
 
  } catch(e) {
  console.error(e);
@@ -2430,21 +3015,155 @@ function DocumentManagerTab({ onKBUpdated, onAmendmentsFromUpload, onOpenClause 
  setUploading(false);
  };
 
+ const applyPendingAmendment = async () => {
+  if (!pendingAmendment) return;
+  const extracted = (pendingAmendment.extracted || []).filter(x => x._selected !== false);
+  if (extracted.length === 0) {
+   setUploadStatus({ name: pendingAmendment.fileName, status:'warn', msg:'선택된 조항이 없습니다. 반영 대상을 선택하세요' });
+   return;
+  }
+
+  const suspiciousCount = extracted.filter(x => x._suspicious).length;
+  const newCount = extracted.filter(x => x._changeType === '신규').length;
+  const riskHeavy = suspiciousCount > 0 || (newCount > 0 && newCount / extracted.length >= 0.5);
+  if (riskHeavy && !applyGuardChecked) {
+   setUploadStatus({ name: pendingAmendment.fileName, status:'warn', msg:'위험 징후가 있어 추가 확인이 필요합니다' });
+   return;
+  }
+
+  const fileName = pendingAmendment.fileName;
+  const amendmentMeta = pendingAmendment.amendmentMeta || null;
+  const ts = new Date().toLocaleString('ko-KR');
+
+  const docEntry = {
+   id: `doc_${Date.now()}`,
+   fileName,
+   docType: 'AMD',
+   uploadedAt: ts,
+   clauseCount: extracted.length,
+   fileSize: pendingAmendment.fileSize || 0,
+   isAmendment: true,
+   amendedDocId: null,
+  };
+
+  await DocDB.saveRaw(docEntry.id, pendingAmendment.rawData);
+
+  const newClauses = [...clauses];
+  for (const ec of extracted) {
+   const idx = newClauses.findIndex(c => c.id === ec.id);
+   if (idx >= 0) {
+    newClauses[idx] = { ...ec, _amended:true, _amendedBy: fileName, _prevCore: newClauses[idx].core };
+   } else {
+    newClauses.push({ ...ec, _new:true, _amendedBy: fileName, _docId: docEntry.id });
+   }
+  }
+
+  const newDocs = [docEntry, ...docs];
+  setClauses(newClauses);
+  setDocs(newDocs);
+  await syncKB(newClauses, conflicts, newDocs);
+
+  const amdPatches = extracted.map(ec => {
+   const prev = clauses.find(c => c.id === ec.id);
+   return {
+    clauseId: ec.id,
+    changeType: ec._changeType || ec._lineChangeType || (prev ? '수정' : '신규'),
+    prevCore: prev?.core || null,
+    newCore: ec.core,
+    topic: ec.topic,
+    amendedBy: `${fileName} (${ts})`,
+   };
+  });
+
+  const amdEntry = {
+   id: Date.now(),
+   fileName,
+   uploadedAt: ts,
+   docType: amendmentMeta?.docType || 'Amendment',
+   effectiveDate: amendmentMeta?.effectiveDate || null,
+   summary: amendmentMeta?.summary || `${fileName} 반영 — ${amdPatches.length}개 조항 변경`,
+   patches: amdPatches,
+  };
+
+  try {
+   const stored = await storage.get('kb_patches_v1');
+   const existing = stored ? JSON.parse(stored) : [];
+   const nextPatches = [amdEntry, ...existing].slice(0, 30);
+   await storage.set('kb_patches_v1', JSON.stringify(nextPatches));
+   if (onAmendmentsFromUpload) {
+    onAmendmentsFromUpload(nextPatches.map(h => ({
+     id: h.id, fileName: h.fileName, docType: h.docType,
+     effectiveDate: h.effectiveDate, summary: h.summary,
+     uploadedAt: h.uploadedAt,
+     changes: h.patches.map(p => ({
+      clauseId: p.clauseId, changeType: p.changeType,
+      newText: p.newCore, prevCore: p.prevCore, topic: p.topic
+     }))
+    })));
+   }
+  } catch(e) {
+   console.warn('patchHistory 저장 실패:', e);
+  }
+
+  setPendingAmendment(null);
+  setExpandedPendingRows({});
+  setUploadStatus({ name: fileName, status:'ok', msg: `${extracted.length}개 조항 반영 완료 — 충돌 재검토 실행` });
+  await runConflictCheck(newClauses, { force: true, amendmentClauseIds: extracted.map(x => x.id).filter(Boolean) });
+ };
+
+ const discardPendingAmendment = () => {
+  if (!pendingAmendment) return;
+  setPendingAmendment(null);
+   setExpandedPendingRows({});
+  setApplyGuardChecked(false);
+  setUploadStatus({ name: pendingAmendment.fileName, status:'warn', msg:'추출 결과가 반영되지 않았습니다' });
+ };
+
+const togglePendingRow = (reviewId) => {
+ if (!pendingAmendment) return;
+ setPendingAmendment(prev => {
+  if (!prev) return prev;
+  const nextRows = (prev.extracted || []).map(r => r._reviewId === reviewId ? { ...r, _selected: !r._selected } : r);
+  return { ...prev, extracted: nextRows };
+ });
+};
+
+const toggleAllPendingRows = (selected) => {
+ if (!pendingAmendment) return;
+ setPendingAmendment(prev => {
+  if (!prev) return prev;
+  const nextRows = (prev.extracted || []).map(r => ({ ...r, _selected: selected }));
+  return { ...prev, extracted: nextRows };
+ });
+};
+
+const togglePendingExpand = (reviewId) => {
+ setExpandedPendingRows(prev => ({ ...prev, [reviewId]: !prev[reviewId] }));
+};
+
  // -- 충돌 재검토 --------------------------------------------------------------
- const runConflictCheck = async (clausesToCheck) => {
+const runConflictCheck = async (clausesToCheck, options = {}) => {
+const force = !!options.force;
+if (!force && (uploading || pendingAmendment)) {
+setConflictStatus({ status:'warn', msg:'추출/검토 중에는 충돌 재검토를 실행할 수 없습니다' });
+return;
+}
  const cl = clausesToCheck || clauses;
+ const focusClauseIds = Array.isArray(options.amendmentClauseIds) ? options.amendmentClauseIds.filter(Boolean) : [];
+ const focusSet = new Set(focusClauseIds);
  if (cl.length === 0) {
  setConflictStatus({ status:'warn', msg:'조항이 없습니다' });
  return;
  }
  setChecking(true);
- setConflictStatus({ status:'running', msg:`${cl.length}개 조항 충돌 검토 중...` });
+ setConflictScope(focusSet.size > 0 ? 'amendment-only' : 'all');
+ setConflictStatus({ status:'running', msg: focusSet.size > 0 ? `${cl.length}개 조항 중 Amendment 연관 충돌 검토 중...` : `${cl.length}개 조항 충돌 검토 중...` });
 
  try {
  const resp = await fetch('/api/chat', {
  method:'POST', headers:{'Content-Type':'application/json'},
  body: JSON.stringify({ max_tokens:3000,
- messages:[{ role:'user', content: CONFLICT_CHECK_PROMPT(cl) }] })
+ messages:[{ role:'user', content: CONFLICT_CHECK_PROMPT(cl, { focusClauseIds }) }] })
  });
  const data = await resp.json();
  const raw = data.content?.map(c=>c.text||'').join('') || '';
@@ -2465,6 +3184,37 @@ function DocumentManagerTab({ onKBUpdated, onAmendmentsFromUpload, onOpenClause 
  if (newConflicts.length===0) throw new Error('충돌 JSON 파싱 실패: '+e.message);
  }
 
+ const knownIds = cl.map(x => x.id).filter(Boolean);
+ const extractIdsFromText = (text) => {
+  const src = String(text || '');
+  return knownIds.filter(id => src.includes(id));
+ };
+ const normalizeOne = (cf, idx) => {
+  const baseIds = Array.isArray(cf?.clauseIds) ? cf.clauseIds.filter(Boolean) : [];
+  const recovered = baseIds.length > 0 ? baseIds : extractIdsFromText((cf?.summary || '') + ' ' + (cf?.why || ''));
+  const uniqIds = Array.from(new Set(recovered));
+  return {
+   id: cf?.id || `XC-NEW-${String(idx + 1).padStart(3, '0')}`,
+   risk: ['HIGH','MEDIUM','LOW'].includes(String(cf?.risk || '').toUpperCase()) ? String(cf.risk).toUpperCase() : 'MEDIUM',
+   topic: cf?.topic || '조항 충돌',
+   summary: cf?.summary || `${uniqIds.join(' vs ')} 충돌 가능성`,
+   why: cf?.why || cf?.detail || '',
+   impact: cf?.impact || '',
+   resolution: cf?.resolution || cf?.recommendation || '',
+   clauseIds: uniqIds,
+  };
+ };
+ newConflicts = (Array.isArray(newConflicts) ? newConflicts : []).map(normalizeOne).filter(cf => Array.isArray(cf.clauseIds) && cf.clauseIds.length >= 2);
+
+ if (focusSet.size > 0) {
+  newConflicts = newConflicts.filter(cf => {
+   const ids = cf.clauseIds || [];
+   const hasFocus = ids.some(id => focusSet.has(id));
+   const hasOther = ids.some(id => !focusSet.has(id));
+   return hasFocus && hasOther;
+  });
+ }
+
  CONTRACT_KB.conflicts = newConflicts;
  setConflicts(newConflicts);
  await DocDB.saveConflicts(newConflicts);
@@ -2472,7 +3222,7 @@ function DocumentManagerTab({ onKBUpdated, onAmendmentsFromUpload, onOpenClause 
 
  setConflictStatus({ status:'ok',
  msg: newConflicts.length > 0
- ? `${newConflicts.length}개 충돌 발견`
+ ? `${newConflicts.length}개 충돌 발견${focusSet.size > 0 ? ' (Amendment 연관만 표시)' : ''}`
  : '충돌 없음' });
  } catch(e) {
  setConflictStatus({ status:'error', msg:'충돌 검토 실패: '+e.message });
@@ -2492,7 +3242,7 @@ function DocumentManagerTab({ onKBUpdated, onAmendmentsFromUpload, onOpenClause 
  if (selectedDoc?.id===docId) setSelectedDoc(null);
  await syncKB(newClauses, conflicts, newDocs);
  if (newClauses.length > 0) {
- await runConflictCheck(newClauses);
+ await runConflictCheck(newClauses, { force: true });
  } else {
  setConflicts([]);
  CONTRACT_KB.conflicts = [];
@@ -2615,11 +3365,11 @@ function DocumentManagerTab({ onKBUpdated, onAmendmentsFromUpload, onOpenClause 
 
  {/* 충돌 재검토 버튼 */}
  <div style={{padding:'8px 16px', borderBottom:'1px solid #1a1a2e'}}>
- <button onClick={()=>runConflictCheck()} disabled={checking}
- style={{width:'100%', padding:'6px', borderRadius:4, border:`1px solid ${checking?'#1e2030':'#a78bfa44'}`,
- background:checking?'#0f1525':'#1a1040', color:checking?'#6677aa':'#a78bfa',
- fontSize:10, fontWeight:600, cursor:checking?'not-allowed':'pointer', fontFamily:'inherit'}}>
- {checking ? '⏳ 충돌 검토 중...' : '🔍 조항 간 충돌 재검토'}
+ <button onClick={()=>runConflictCheck()} disabled={checking || uploading || !!pendingAmendment}
+ style={{width:'100%', padding:'6px', borderRadius:4, border:`1px solid ${(checking || uploading || !!pendingAmendment)?'#1e2030':'#a78bfa44'}`,
+ background:(checking || uploading || !!pendingAmendment)?'#0f1525':'#1a1040', color:(checking || uploading || !!pendingAmendment)?'#6677aa':'#a78bfa',
+ fontSize:10, fontWeight:600, cursor:(checking || uploading || !!pendingAmendment)?'not-allowed':'pointer', fontFamily:'inherit'}}>
+ {(checking || uploading) ? '⏳ 충돌 검토 중...' : pendingAmendment ? '⏸ 검토 승인 후 실행 가능' : '🔍 조항 간 충돌 재검토'}
  </button>
  {conflictStatus && (
  <div style={{marginTop:4, fontSize:9, color:statusColor(conflictStatus.status), textAlign:'center'}}>
@@ -2756,6 +3506,70 @@ function DocumentManagerTab({ onKBUpdated, onAmendmentsFromUpload, onOpenClause 
  )}
  </div>
 
+ {pendingAmendment && (
+ <div style={{margin:'12px 16px 0',padding:'10px',borderRadius:6,border:'1px solid #f59e0b44',background:'#1a1408'}}>
+ <div style={{fontSize:11,color:'#fbbf24',fontWeight:700,marginBottom:6}}>추출 결과 검토 필요</div>
+ <div style={{fontSize:10,color:'#a0b8d0',marginBottom:8}}>
+  {pendingAmendment.fileName} · {pendingAmendment.extracted.length}개 조항
+  {" · 수정 "}{(pendingAmendment.extracted||[]).filter(x=>x._changeType==='수정').length}
+  {" · 신규 "}{(pendingAmendment.extracted||[]).filter(x=>x._changeType==='신규').length}
+ </div>
+ <div style={{display:'flex',gap:6,marginBottom:8}}>
+  <button onClick={()=>toggleAllPendingRows(true)} style={{padding:'4px 8px',borderRadius:4,border:'1px solid #334155',background:'#0f172a',color:'#cbd5e1',fontSize:10,cursor:'pointer',fontFamily:'inherit'}}>전체 선택</button>
+  <button onClick={()=>toggleAllPendingRows(false)} style={{padding:'4px 8px',borderRadius:4,border:'1px solid #334155',background:'#0f172a',color:'#cbd5e1',fontSize:10,cursor:'pointer',fontFamily:'inherit'}}>전체 해제</button>
+ </div>
+ <div style={{maxHeight:200,overflowY:'auto',display:'flex',flexDirection:'column',gap:5,marginBottom:8}}>
+ {(pendingAmendment.extracted || []).map((ec, idx) => (
+ <div key={ec._reviewId || (ec.id+idx)} style={{padding:'6px 8px',background:'#0f0f1a',border:`1px solid ${ec._suspicious?'#ef444466':'#1e2030'}`,borderRadius:4,opacity:ec._selected===false?0.55:1}}>
+ <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+  <input type='checkbox' checked={ec._selected!==false} onChange={()=>togglePendingRow(ec._reviewId || (ec.id+idx))} />
+  <div style={{fontSize:10,color:'#60a5fa',fontWeight:700}}>{ec.id || 'ID 없음'} · {ec._changeType || '수정'} · {ec.topic || '주제 없음'}</div>
+  {ec._suspicious && <span style={{fontSize:9,color:'#fca5a5',marginLeft:'auto'}}>검토주의</span>}
+ </div>
+ <div style={{fontSize:9,color:'#94a3b8',lineHeight:1.5}}>이전: {(ec._prevCore || '(기존 없음)').slice(0, 140)}</div>
+ <div style={{fontSize:10,color:'#9aaabb',lineHeight:1.55,marginTop:2}}>변경: {(ec.core || '').slice(0, 180)}</div>
+ <div style={{marginTop:6,display:'flex',justifyContent:'flex-end'}}>
+  <button onClick={()=>togglePendingExpand(ec._reviewId || (ec.id+idx))}
+  style={{padding:'3px 8px',borderRadius:4,border:'1px solid #334155',background:'#111827',color:'#cbd5e1',fontSize:9,cursor:'pointer',fontFamily:'inherit'}}>
+  {expandedPendingRows[ec._reviewId || (ec.id+idx)] ? '전문 비교 닫기' : '전문 비교 보기'}
+  </button>
+ </div>
+ {expandedPendingRows[ec._reviewId || (ec.id+idx)] && (
+ <div style={{marginTop:6,paddingTop:6,borderTop:'1px solid #1e2030',display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+  <div style={{background:'#0b1220',border:'1px solid #1e293b',borderRadius:4,padding:'6px 7px'}}>
+  <div style={{fontSize:9,color:'#93c5fd',fontWeight:700,marginBottom:4}}>변경 전 전문</div>
+  <div style={{fontSize:9,color:'#9fb2c8',lineHeight:1.55,whiteSpace:'pre-wrap',maxHeight:160,overflowY:'auto'}}>
+   {CLAUSE_FULLTEXT[ec.id]?.text || ec._prevCore || '(기존 전문 없음)'}
+  </div>
+  </div>
+  <div style={{background:'#102014',border:'1px solid #1f3b2f',borderRadius:4,padding:'6px 7px'}}>
+  <div style={{fontSize:9,color:'#86efac',fontWeight:700,marginBottom:4}}>변경 후 전문</div>
+  <div style={{fontSize:9,color:'#b7d5bf',lineHeight:1.55,whiteSpace:'pre-wrap',maxHeight:160,overflowY:'auto'}}>
+   {ec.text || ec.core || '(변경 전문 없음)'}
+  </div>
+  </div>
+ </div>
+ )}
+ </div>
+ ))}
+ </div>
+ {((pendingAmendment.extracted||[]).filter(x => (x._selected!==false) && x._suspicious).length > 0 || (((pendingAmendment.extracted||[]).filter(x=>x._selected!==false && x._changeType==='신규').length) >= Math.max(1, Math.ceil((pendingAmendment.extracted||[]).filter(x=>x._selected!==false).length/2)))) && (
+  <label style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,fontSize:10,color:'#fbbf24'}}>
+   <input type='checkbox' checked={applyGuardChecked} onChange={e=>setApplyGuardChecked(e.target.checked)} />
+   위험 징후(신규 과다 또는 ID 불명)가 있어도 반영 진행
+  </label>
+ )}
+ <div style={{display:'flex',gap:8}}>
+ <button onClick={applyPendingAmendment} style={{padding:'7px 10px',borderRadius:4,border:'1px solid #10b98144',background:'#0a2a1a',color:'#10b981',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+ 검토 완료 · KB 반영
+ </button>
+ <button onClick={discardPendingAmendment} style={{padding:'7px 10px',borderRadius:4,border:'1px solid #64748b44',background:'#101827',color:'#94a3b8',fontSize:11,cursor:'pointer',fontFamily:'inherit'}}>
+ 폐기
+ </button>
+ </div>
+ </div>
+ )}
+
  <div style={{flex:1, overflowY:'auto', padding:16}}>
 
  {/* 충돌 현황 */}
@@ -2768,10 +3582,13 @@ function DocumentManagerTab({ onKBUpdated, onAmendmentsFromUpload, onOpenClause 
  : <>
  <div style={{fontSize:10, color:'#6677aa', marginBottom:12}}>
  총 {conflicts.length}건의 조항 간 충돌이 탐지되었습니다.
+ {conflictScope === 'amendment-only' && <span style={{color:'#fbbf24', marginLeft:6}}>Amendment 변경 조항과 타 조항 간 충돌만 표시</span>}
  {highConflicts > 0 && <span style={{color:'#ff2d20', marginLeft:6}}>HIGH {highConflicts}건 즉시 검토 필요</span>}
  </div>
  {conflicts.map((cf,i) => {
  const rc = RISK_COLOR[cf.risk]||'#8899aa';
+ const pairIds = Array.isArray(cf.clauseIds) ? cf.clauseIds.slice(0, 2) : [];
+ const pairClauses = pairIds.map(id => clauses.find(c => c.id === id) || CONTRACT_KB.clauses.find(c => c.id === id)).filter(Boolean);
  return (
  <div key={cf.id||i} style={{marginBottom:8, padding:'10px 12px', borderRadius:5,
  border:`1px solid ${rc}33`, background:rc+'08'}}>
@@ -2781,7 +3598,32 @@ function DocumentManagerTab({ onKBUpdated, onAmendmentsFromUpload, onOpenClause 
  <span style={{fontSize:9, fontWeight:700, color:rc,
  background:rc+'18', padding:'2px 7px', borderRadius:3}}>{cf.risk}</span>
  </div>
- <div style={{fontSize:10, color:'#9aaabb', lineHeight:1.6}}>{linkifyClauses(cf.summary, onOpenClause)}</div>
+ <div style={{fontSize:10, color:'#cbd5e1', lineHeight:1.6, fontWeight:600}}>{linkifyClauses(cf.summary, onOpenClause)}</div>
+ {!!(cf.why || cf.detail) && (
+ <div style={{marginTop:4, fontSize:10, color:'#9aaabb', lineHeight:1.6}}>
+  왜 충돌? {linkifyClauses(cf.why || cf.detail, onOpenClause)}
+ </div>
+ )}
+ {!!cf.impact && (
+ <div style={{marginTop:4, fontSize:10, color:'#fbbf24', lineHeight:1.6}}>
+  영향: {linkifyClauses(cf.impact, onOpenClause)}
+ </div>
+ )}
+ {!!(cf.resolution || cf.recommendation) && (
+ <div style={{marginTop:4, fontSize:10, color:'#86efac', lineHeight:1.6}}>
+  판단 기준/권고: {linkifyClauses(cf.resolution || cf.recommendation, onOpenClause)}
+ </div>
+ )}
+ {pairClauses.length > 0 && (
+ <div style={{marginTop:6, display:'grid', gridTemplateColumns:'1fr 1fr', gap:6}}>
+  {pairClauses.map((pc, pidx) => (
+  <div key={(pc.id || pidx) + '-' + pidx} style={{background:'#0b1220', border:'1px solid #1e293b', borderRadius:4, padding:'5px 6px'}}>
+   <div style={{fontSize:9, color:'#93c5fd', fontWeight:700, marginBottom:2}}>{linkifyClauses(pc.id || '', onOpenClause)} · {pc.topic || '주제 없음'}</div>
+   <div style={{fontSize:9, color:'#9fb2c8', lineHeight:1.5}}>{linkifyClauses((pc.core || '').slice(0, 180), onOpenClause)}</div>
+  </div>
+  ))}
+ </div>
+ )}
  {cf.clauseIds && cf.clauseIds.length > 0 && (
  <div style={{marginTop:5, display:'flex', gap:4, flexWrap:'wrap'}}>
  {cf.clauseIds.map(id=>(
@@ -2838,6 +3680,14 @@ function DocumentManagerTab({ onKBUpdated, onAmendmentsFromUpload, onOpenClause 
  })()}
 
  </div>
+
+ <DocManagerFollowupChat
+  docs={docs}
+  clauses={clauses}
+  conflicts={conflicts}
+  selectedDoc={selectedDoc}
+  onOpenClause={onOpenClause}
+ />
  </div>
  </div>
  );
@@ -2872,7 +3722,25 @@ const AMENDMENT_PARSE_PROMPT = `다음 계약 문서(Amendment, 신규 계약서
 번역 품질 규칙:
 - newTranslation은 반드시 전문완역으로 작성. 핵심만 추려 쓴 요약문 금지.
 - 항목 번호, 단서, 예외, 금액, 기간, 조건을 절대 생략하지 말 것.
-- 원문이 영어인 경우에도 문장 전체를 한국어로 번역해서 제공할 것.`;
+- 원문이 영어인 경우에도 문장 전체를 한국어로 번역해서 제공할 것.
+
+중요 규칙:
+- Amendment는 조항 번호가 있는 수정 외에 다음 형태도 포함될 수 있음:
+  (a) 정의(Definition) 변경: "X means ..." 형태로 기존 정의를 교체하는 경우
+  (b) Appendix/Schedule 전체 교체: 목록 데이터(회사명, 조건 등) 형태
+  (c) 전문(前文)/서명란: 법적 효력 없는 서술문 - patches에 포함하지 말 것
+  (d) "except as amended, all other terms remain" 같은 일반 문구 - 포함하지 말 것
+- 추출 순서:
+  ① 문서 전체를 읽고 변경 대상을 유형별로 분류 (조항수정 / 정의변경 / Appendix교체)
+  ② 각 유형별로 빠짐없이 patches 배열에 추가
+  ③ Appendix 교체는 전체 목록 내용을 newFullText에 포함
+- clauseId 결정 기준:
+  - 조항 번호(3.2.5.2 등) -> 기존 KB ID 형식으로 매핑 (예: SAA-3.2.5.2)
+  - 정의 변경("Target Market") -> 해당 정의가 속한 조항 ID (예: SAA-APP6-DEF)
+  - Appendix 전체 교체 -> SAA-APP6, SAA-APP7 등 Appendix 번호로 ID 생성
+- 내용이 목록 형태(회사명 테이블 등)인 경우 newFullText에 전체 목록을 포함
+- 조항 내용이 짧거나 목록이어도 patches에 반드시 포함
+- patches 배열이 비어있으면 안 됨`;
 
 // --- KB AMENDMENT MANAGER -----------------------------------------------------
 function AmendmentManager({ onAmendmentsChange }) {
@@ -2911,6 +3779,7 @@ function AmendmentManager({ onAmendmentsChange }) {
  if (!["pdf","docx","doc","txt"].includes(ext)) return;
  setParsing(true);
  setParseStatus({ name: file.name, status: "parsing", msg: "AI가 조항 변경사항 추출 중..." });
+ let raw = "";
 
  try {
  let textContent = null, b64 = null, mediaType = "text/plain";
@@ -2940,7 +3809,7 @@ function AmendmentManager({ onAmendmentsChange }) {
  { type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } },
  { type: "text", text: AMENDMENT_PARSE_PROMPT }
  ]
- : AMENDMENT_PARSE_PROMPT + "\n\n===문서 내용===\n" + (textContent || "").slice(0, 10000);
+ : AMENDMENT_PARSE_PROMPT + "\n\n===문서 내용===\n" + (textContent || "").slice(0, 50000);
 
  const resp = await fetch("/api/chat", {
  method: "POST",
@@ -2949,7 +3818,7 @@ function AmendmentManager({ onAmendmentsChange }) {
  messages: [{ role: "user", content: msgContent }] })
  });
  const data = await resp.json();
- const raw = data.content?.map(c => c.text || "").join("") || "";
+ raw = data.content?.map(c => c.text || "").join("") || "";
  const jsonStr = raw.replace(/[\x60]{3}json|[\x60]{3}/g, "").trim();
  let parsed;
  try {
@@ -2992,11 +3861,21 @@ function AmendmentManager({ onAmendmentsChange }) {
  changes: h.patches.map(p => ({ clauseId: p.clauseId, changeType: p.changeType, newText: p.newCore, prevCore: p.prevCore, topic: p.topic }))
  })));
 
- setParseStatus({ name: file.name, status: "ok", msg: `KB 업데이트 완료 — ${patches.length}개 조항 반영` });
+ setParseStatus({
+  name: file.name,
+  status: "ok",
+  msg: `${patches.length}개 조항 추출 완료`,
+  clauseIds: patches.map(p => p.clauseId).filter(Boolean),
+ });
 
  } catch(e) {
  console.error(e);
- setParseStatus({ name: file.name, status: "error", msg: "실패: " + e.message });
+ setParseStatus({
+  name: file.name,
+  status: "error",
+  msg: "파싱 실패: " + e.message,
+  rawResponse: (raw || "").slice(0, 500),
+ });
  }
  setParsing(false);
  };
@@ -3072,6 +3951,22 @@ function AmendmentManager({ onAmendmentsChange }) {
  <span style={{fontSize:9,color:parseStatus.status==="ok"?"#10b981":parseStatus.status==="error"?"#ff2d20":parseStatus.status==="warn"?"#f59e0b":"#60a5fa"}}>
  {parseStatus.status==="ok"?"✓":parseStatus.status==="error"?"✗":parseStatus.status==="warn"?"⚠":"⏳"}{" "}{parseStatus.name}: {parseStatus.msg}
  </span>
+ {parseStatus.status === "error" && parseStatus.rawResponse && (
+ <details style={{marginTop:6}}>
+  <summary style={{fontSize:9,color:"#fca5a5",cursor:"pointer"}}>LLM 원본 응답 보기</summary>
+  <pre style={{marginTop:6,whiteSpace:"pre-wrap",wordBreak:"break-word",fontSize:9,color:"#fecaca",background:"#120707",border:"1px solid #7f1d1d66",borderRadius:4,padding:"6px",maxHeight:160,overflowY:"auto"}}>{parseStatus.rawResponse}</pre>
+ </details>
+ )}
+ {parseStatus.status === "ok" && Array.isArray(parseStatus.clauseIds) && parseStatus.clauseIds.length > 0 && (
+ <details style={{marginTop:6}}>
+  <summary style={{fontSize:9,color:"#86efac",cursor:"pointer"}}>추출된 조항 ID 보기 ({parseStatus.clauseIds.length}개)</summary>
+  <div style={{marginTop:6,display:"flex",flexWrap:"wrap",gap:4}}>
+  {parseStatus.clauseIds.map((id, idx) => (
+   <span key={id + "-" + idx} style={{fontSize:8,color:"#86efac",background:"#052e16",border:"1px solid #16653466",padding:"1px 5px",borderRadius:3}}>{id}</span>
+  ))}
+  </div>
+ </details>
+ )}
  </div>
  )}
  </div>

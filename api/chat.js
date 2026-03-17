@@ -92,7 +92,7 @@ export default async function handler(req, res) {
     const legacyPayload = {
       messages: openaiMessages,
       max_tokens: tokenLimit,
-      temperature: 0.3,
+      temperature: 0,
     };
     const v1Payload = {
       messages: openaiMessages,
