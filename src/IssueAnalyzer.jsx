@@ -6,13 +6,13 @@ const SUPABASE_URL = typeof __SUPABASE_URL__ !== "undefined" ? __SUPABASE_URL__ 
 const SUPABASE_KEY = typeof __SUPABASE_KEY__ !== "undefined" ? __SUPABASE_KEY__ : null;
 const USE_SUPABASE = !!(SUPABASE_URL && SUPABASE_KEY);
 
-const SESSION_ID = (() => {
- try {
- let id = localStorage.getItem("_ckt_session");
- if (!id) { id = crypto.randomUUID(); localStorage.setItem("_ckt_session", id); }
- return id;
- } catch { return "default"; }
-})();
+const getSessionId = () => {
+ try { return localStorage.getItem("_ckt_session") || ""; } catch { return ""; }
+};
+const setSessionId = (id) => {
+ try { localStorage.setItem("_ckt_session", id); } catch {}
+};
+let SESSION_ID = getSessionId();
 
 const sbFetch = async (method, table, body) => {
  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
@@ -64,6 +64,8 @@ const storage = {
 };
 
 export default function IssueAnalyzer() {
+ const [sessionCode, setSessionCode] = useState(SESSION_ID);
+ const [sessionReady, setSessionReady] = useState(!!SESSION_ID);
  const [appTab, setAppTab] = useState("docs"); // "docs" | "analyze"
  const [globalViewingClause, setGlobalViewingClause] = useState(null);
  const [mode, setMode] = useState("basic");
@@ -78,6 +80,7 @@ export default function IssueAnalyzer() {
  const [translationSync, setTranslationSync] = useState({ running:false, total:0, done:0, failed:0 });
 
  useEffect(()=>{
+ if (!sessionReady) return;
  (async()=>{
  try {
  const patchHistory = await loadAndApplyStoredPatches();
@@ -123,7 +126,21 @@ export default function IssueAnalyzer() {
  }
  } catch(e){}
  })();
- },[]);
+ },[sessionReady]);
+
+ const handleSessionStart = () => {
+  const next = (sessionCode || "").toLowerCase().trim();
+  if (!next) return;
+  SESSION_ID = next;
+  setSessionId(SESSION_ID);
+  setSessionCode(SESSION_ID);
+  setSessionReady(true);
+ };
+
+ const handleSessionChange = () => {
+  setSessionCode(SESSION_ID || "");
+  setSessionReady(false);
+ };
 
  const handleAmendmentsChange = (list) => { setAmendments(list); };
  const handleKBUpdated = ({ clauses, conflicts }) => {
@@ -236,6 +253,38 @@ export default function IssueAnalyzer() {
 
  const current = history.find(h=>h.id===activeHistory);
 
+ if (!sessionReady) {
+ return (
+ <div style={{fontFamily:"'Inter','Noto Serif KR',sans-serif",background:"#080c14",height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",color:"#e2e8f0",overflow:"hidden"}}>
+ <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+ <div style={{width:"min(520px, 92vw)",background:"#0b1120",border:"1px solid #1c2840",borderRadius:10,padding:"24px 22px",boxShadow:"0 10px 30px rgba(0,0,0,0.35)"}}>
+ <div style={{fontSize:18,fontWeight:700,color:"#dbeafe",fontFamily:"'JetBrains Mono',monospace",letterSpacing:"0.06em"}}>Contract Intelligence</div>
+ <div style={{fontSize:11,color:"#4a6080",marginTop:4,marginBottom:20,letterSpacing:"0.05em"}}>KT × Palantir Korea</div>
+ <div style={{fontSize:12,color:"#9fb2c8",marginBottom:8}}>팀 코드를 입력하세요</div>
+ <div style={{display:"flex",gap:8}}>
+ <input
+ value={sessionCode}
+ onChange={e=>setSessionCode(e.target.value)}
+ onKeyDown={e=>e.key==="Enter" && (sessionCode || "").trim() && handleSessionStart()}
+ placeholder="예: KT-SPA팀"
+ style={{flex:1,background:"#080e1c",border:"1px solid #1c2840",borderRadius:6,padding:"9px 11px",fontSize:12,color:"#c8d8ec",fontFamily:"'JetBrains Mono',monospace",outline:"none"}}
+ />
+ <button
+ onClick={handleSessionStart}
+ disabled={!(sessionCode || "").trim()}
+ style={{padding:"9px 14px",background:(sessionCode || "").trim()?"#1d4ed8":"#0d1825",border:`1px solid ${(sessionCode || "").trim()?"#3b82f644":"#1c2840"}`,borderRadius:6,fontSize:11,fontWeight:700,fontFamily:"'Noto Serif KR',serif",color:(sessionCode || "").trim()?"#93c5fd":"#2d4060",cursor:(sessionCode || "").trim()?"pointer":"not-allowed"}}
+ >
+ 시작
+ </button>
+ </div>
+ <div style={{fontSize:10,color:"#6677aa",marginTop:12,lineHeight:1.7}}>
+ 같은 코드를 입력하면 어느 PC에서도 동일한 데이터를 불러옵니다
+ </div>
+ </div>
+ </div>
+ );
+ }
+
  return (
  <div style={{fontFamily:"'Inter','Noto Serif KR',sans-serif",background:"#080c14",height:"100vh",display:"flex",flexDirection:"column",color:"#e2e8f0",overflow:"hidden"}}>
  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
@@ -274,6 +323,15 @@ export default function IssueAnalyzer() {
  </div>
  {/* 우측 배지 */}
  <div style={{display:"flex",gap:8,marginLeft:"auto",alignItems:"center"}}>
+ <div style={{display:"flex",alignItems:"center",gap:6,marginRight:6}}>
+ <span style={{fontSize:10,color:"#9fb2c8",background:"#121d30",padding:"2px 8px",borderRadius:3,border:"1px solid #1c2840",fontFamily:"'JetBrains Mono',monospace"}}>
+ 세션: {SESSION_ID || "-"}
+ </span>
+ <button onClick={handleSessionChange}
+ style={{padding:"2px 8px",borderRadius:3,border:"1px solid #334155",background:"#0f172a",color:"#cbd5e1",fontSize:10,cursor:"pointer",fontFamily:"'JetBrains Mono',monospace"}}>
+ 변경
+ </button>
+ </div>
  <span style={{fontSize:9,color:"#2d4060",fontFamily:"'JetBrains Mono',monospace",letterSpacing:"0.08em"}}>KB</span>
  <span style={{fontSize:10,color:"#7db8f7",background:"#1a2e4a",padding:"2px 8px",borderRadius:3,border:"1px solid #1d4ed833",fontFamily:"'JetBrains Mono',monospace"}}>
  {kbSummary.clauses} 조항
