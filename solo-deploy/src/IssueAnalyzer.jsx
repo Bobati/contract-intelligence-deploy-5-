@@ -341,14 +341,23 @@ let CLAUSE_FULLTEXT = {
   },
   "SAA-2.10": {
     doc:"SAA", section:"Section 2.10", title:"Extraordinary Bilateral Transaction",
-    text:``,
-    context:"KT가 발굴한 고객에 Palantir이 직접 접근하는 경우의 처리 절차. '삼성전자 직접 접촉' 시나리오에서 핵심 조항. IC-001 충돌과 직결.",
-    translation:`Palantir이 Territory 내에서 KT의 독점권(§1.3.1) 범위에 해당하는 잠재 고객과 독자적으로 사업 기회를 발굴·개발하는 경우("Extraordinary Bilateral Transaction", EBT), Palantir은 다음 절차를 이행해야 한다:
-(a) **해당 기회를 KT에 서면으로 즉시 통보**
-(b) 해당 거래의 구조에 관해 KT와 **성실히(good faith) 협상**
-(c) 합리적인 상업 조건으로 KT에 **참여권(participation right) 제공**
+    text:`2.10 Extraordinary Bilateral Transactions Attributable to Hurdle. A transaction where Partner finds, cultivates, registers, and prepares for finalizing an opportunity with a Target End Customer pursuant to this Agreement but where (a) the Target End Customer communicates that it desires to contract directly with Palantir rather than Partner for purposes of executing the specific opportunity, and (b) Palantir and such Target End Customer finally enter into a contract for such specific opportunity resulting directly from Partner's efforts pursuant to this Agreement without Partner receiving revenue that would have been defined as Net Revenue attributable to a Qualified Sale Contract that Partner would have executed but for Palantir's contracting, can be treated as an "Extraordinary Bilateral Transaction". In such case, the Parties will meet to discuss and evaluate Partner's activities for such Extraordinary Bilateral Transaction and determine whether to reasonably find that Partner has made and/or will continue to make contribution to Palantir's obtaining revenue from such Extraordinary Bilateral Transaction and whether to consider all or a portion of Palantir's obtained revenue to be counted as Net Revenue.
 
-**Palantir의 최초 통보 후 30일 이내에 합의가 이루어지지 않을 경우**, Palantir은 비독점 방식으로 해당 거래를 진행할 수 있다. 단, 이 경우 **최초 계약 기간 동안 해당 거래에서 발생한 순수익의 [REDACTED]%를 KT에 소개 수수료(referral fee)로 지급**해야 한다.`
+2.10.1 If the Parties mutually agree that all or a portion of Palantir's obtained revenue from the Extraordinary Bilateral Transaction should be counted as Net Revenue, then it shall be applied to calculation of the Hurdle, except where the Hurdle is exhausted in which case the parties will mutually agree whether the Partner will receive any Partner Compensation for the Extraordinary Bilateral Transaction; and
+
+2.10.2 On a quarterly basis, Palantir shall report to Partner the Net Revenue arising from such Extraordinary Bilateral Transactions, and the Net Revenue arising from such Extraordinary Bilateral Transactions shall be deducted from Partner's next payment arising under Order Form #2 (or provided to Partner as credit if Partner has finished all payments arising under Order Form #2).
+
+2.10.3 The Parties shall in good faith discuss procedures and criteria regarding how to evaluate Partner's contribution for prospective Extraordinary Bilateral Transactions and use their reasonable efforts to reach agreement for this purpose.`,
+    context:"KT가 발굴한 고객에 Palantir이 직접 접근하는 경우의 처리 절차. '삼성전자 직접 접촉' 시나리오에서 핵심 조항. IC-001 충돌과 직결.",
+    translation:`[조항 ID] 2.10
+[조항 제목] 허들에 귀속되는 예외적 쌍방 거래(Extraordinary Bilateral Transaction)
+2.10 허들에 귀속되는 예외적 쌍방 거래. 본 계약에 따라 파트너가 타깃 최종고객과의 기회를 발굴, 육성, 등록하고 최종 계약 체결을 준비하였으나, (a) 해당 타깃 최종고객이 해당 특정 기회의 수행 목적상 파트너가 아니라 Palantir와 직접 계약하기를 원한다고 통지하고, (b) 그 결과 Palantir와 해당 타깃 최종고객이 본 계약에 따른 파트너의 노력으로 직접 발생한 해당 특정 기회에 관하여 최종 계약을 체결하되, 파트너가 Palantir의 직접 계약이 없었더라면 파트너가 체결했을 적격 재판매계약(Qualified Sale Contract)에 귀속되는 순매출(Net Revenue)로 보았을 수익을 수취하지 못하는 경우, 해당 거래는 "예외적 쌍방 거래(Extraordinary Bilateral Transaction)"로 취급될 수 있다. 이 경우 당사자들은 회합하여 해당 예외적 쌍방 거래에 관한 파트너의 활동을 논의하고 평가하며, 파트너가 Palantir의 해당 예외적 쌍방 거래 수익 획득에 기여했거나 계속 기여할 것인지 여부를 합리적으로 판단하고, Palantir가 획득한 수익의 전부 또는 일부를 순매출(Net Revenue)로 산입할지 여부를 결정한다.
+
+2.10.1 당사자들이 예외적 쌍방 거래에서 Palantir가 획득한 수익의 전부 또는 일부를 순매출(Net Revenue)로 산입하기로 상호 합의하는 경우, 해당 금액은 허들(Hurdle) 산정에 반영한다. 단, 허들이 이미 소진된 경우에는 파트너가 해당 예외적 쌍방 거래에 대해 파트너 보상(Partner Compensation)을 수령할지 여부를 당사자들이 상호 합의한다.
+
+2.10.2 Palantir는 분기별로 해당 예외적 쌍방 거래에서 발생한 순매출(Net Revenue)을 파트너에게 보고해야 하며, 그러한 순매출은 Order Form #2에 따라 발생하는 파트너의 차기 지급액에서 공제된다(또는 파트너가 Order Form #2에 따른 모든 지급을 이미 완료한 경우에는 파트너에게 크레딧으로 제공된다).
+
+2.10.3 당사자들은 장래의 예외적 쌍방 거래에 대한 파트너 기여도를 어떻게 평가할지에 관한 절차와 기준을 성실히(good faith) 협의하고, 이를 위한 합의에 도달하도록 합리적인 노력을 다한다.`
   },
   "SAA-2.11": {
     doc:"SAA", section:"Section 2.11", title:"Surviving QRC Revenue Allocation",
@@ -457,6 +466,14 @@ SPC(Special Purpose Company, 특수목적법인)로의 마이그레이션이 발
 • KT 정보보호지침 제43조에 따라 **신규 정보시스템 도입 전 CISO 보안성 승인 필수**
 • OF4에 따른 Azure 즉시 사용 의무와 충돌
 • CISO 승인 없이 Azure 도입 시 내규 위반 → TOS §8.4의 '법적 준수 위반'으로 해석되어 즉시 서비스 정지 사유가 될 수 있음`
+  },
+  "SAA-10.4": {
+    doc:"SAA", section:"10.4", title:"독립 개발권",
+    text:`10.4 Right to Independently Develop. Subject to any obligations of confidentiality and to the Parties' respective intellectual property rights, in no event shall either Party be precluded or restricted from developing, using, marketing, or providing for itself or for others, materials that are competitive with the products and services of the other Party, irrespective of their similarity to any products or services offered by the other Party in connection with this Agreement, provided that the materials are independently developed without use of any Confidential Information of the other Party, by employees of the first Party who have had no access to any such Confidential Information. Each Party acknowledges that the other may already possess or have developed such materials independently. In addition, each Party shall be free to use its general knowledge, skills, experience, ideas, concepts, know-how, and techniques within the scope of its business that are used or developed in connection with the Agreement.`,
+    context:"Palantir의 유사 솔루션 독립 개발 시 기밀 사용 여부가 핵심 쟁점",
+    translation:`[조항 ID] 10.4
+[조항 제목] 독립 개발권
+10.4 독립적으로 개발할 권리(Right to Independently Develop). 비밀유지에 관한 의무 및 당사자 각자의 지식재산권을 전제로 하는 한, 어느 당사자도 상대방의 제품 및 서비스와 경쟁되는 자료를 자신을 위하여 또는 타인을 위하여 개발, 사용, 마케팅 또는 제공하는 행위로부터 어떠한 경우에도 배제되거나 제한되지 아니한다. 이 원칙은 해당 자료가 본 계약과 관련하여 상대방이 제공하는 제품 또는 서비스와 유사한지 여부와 관계없이 동일하게 적용된다. 다만 이러한 자료는, 상대방의 어떠한 기밀정보도 사용하지 않고, 또한 그러한 기밀정보에 접근한 바 없는 제1당사자의 직원들에 의해 독립적으로 개발된 것이어야 한다. 각 당사자는 상대방이 이미 그러한 자료를 보유하고 있거나, 또는 독립적으로 개발해 왔거나 개발했을 수 있음을 인정한다. 또한 각 당사자는 본 계약과 관련하여 사용되거나 개발된 범위 내에서, 자신의 일반적 지식, 기술, 경험, 아이디어, 개념, 노하우 및 기법을 자유롭게 사용할 수 있다.`
   },
   "TOS-7": {
     doc:"TOS", section:"Section 7", title:"Fees and Payment / Late Payment",

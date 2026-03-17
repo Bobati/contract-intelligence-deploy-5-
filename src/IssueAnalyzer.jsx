@@ -32,6 +32,9 @@ const sbFetch = async (method, table, body) => {
 const _memStore = new Map();
 // 원문 인메모리 스토어: { docId -> { type, b64?, text?, mediaType?, fileName, docType } }
 const _rawDocStore = new Map();
+// 조항 전문번역 인메모리 캐시: { clauseId -> fullTranslation }
+const _fullTranslationCache = new Map();
+const FULL_TRANSLATION_BANK_KEY = "clause_full_translation_bank_v1";
 
 const storage = {
  get: async (key) => {
@@ -62,6 +65,7 @@ const storage = {
 
 export default function IssueAnalyzer() {
  const [appTab, setAppTab] = useState("docs"); // "docs" | "analyze"
+ const [globalViewingClause, setGlobalViewingClause] = useState(null);
  const [mode, setMode] = useState("basic");
  const [input, setInput] = useState("");
  const [history, setHistory] = useState([]);
@@ -71,12 +75,14 @@ export default function IssueAnalyzer() {
  const [activeHistory, setActiveHistory] = useState(null);
  const [amendments, setAmendments] = useState([]);
  const [kbSummary, setKbSummary] = useState({ clauses: CONTRACT_KB.clauses.length, conflicts: CONTRACT_KB.conflicts.length });
+ const [translationSync, setTranslationSync] = useState({ running:false, total:0, done:0, failed:0 });
 
  useEffect(()=>{
  (async()=>{
  try {
  await loadAndApplyStoredPatches();
  await loadDynamicKB();
+ await loadStoredFullTranslations();
  setKbSummary({ clauses: CONTRACT_KB.clauses.length, conflicts: CONTRACT_KB.conflicts.length });
  const s = await storage.get("issue_history");
  if (s) {
@@ -88,6 +94,15 @@ export default function IssueAnalyzer() {
    }
   });
   setHistory(h);
+ }
+
+ const pending = getClausesNeedingFullTranslation().length;
+ if (pending > 0) {
+ setTranslationSync({ running:true, total:pending, done:0, failed:0 });
+ await buildAndPersistFullTranslationBank({
+ onProgress: ({ done, failed, total }) => setTranslationSync({ running:true, total, done, failed }),
+ });
+ setTranslationSync((prev) => ({ ...prev, running:false }));
  }
  } catch(e){}
  })();
@@ -253,6 +268,11 @@ export default function IssueAnalyzer() {
  </span>
  {appTab==="analyze" && <>
  <div style={{width:1,height:20,background:"#1c2840",margin:"0 2px"}}/>
+ {translationSync.running && (
+ <span style={{fontSize:10,color:"#22c55e",background:"#052010",padding:"2px 8px",borderRadius:3,border:"1px solid #22c55e33",fontFamily:"'JetBrains Mono',monospace"}}>
+ 번역 동기화 {translationSync.done}/{translationSync.total}
+ </span>
+ )}
  <div style={{display:"flex",background:"#0d1825",borderRadius:4,padding:2,border:"1px solid #1c2840"}}>
  {[["basic","기본"],["extended","확장"]].map(([m,label])=>(
  <button key={m} onClick={()=>setMode(m)} style={{padding:"3px 11px",borderRadius:3,border:"none",cursor:"pointer",fontSize:10,fontWeight:600,fontFamily:"'Noto Serif KR',serif",transition:"all 0.15s",
@@ -271,6 +291,7 @@ export default function IssueAnalyzer() {
  {appTab==="docs" && (
  <DocumentManagerTab
  onKBUpdated={handleKBUpdated}
+ onOpenClause={setGlobalViewingClause}
  onAmendmentsFromUpload={(list) => {
  const merged = [...list, ...amendments.filter(a => !list.find(l=>l.id===a.id))];
  setAmendments(merged);
@@ -280,7 +301,7 @@ export default function IssueAnalyzer() {
 
  {/* 변경 이력 탭 */}
  {appTab==="timeline" && (
- <ClauseTimelineTab/>
+ <ClauseTimelineTab onOpenClause={setGlobalViewingClause}/>
  )}
 
  {/* 허들 트래커 탭 */}
@@ -392,7 +413,7 @@ export default function IssueAnalyzer() {
  <span style={{fontSize:12,color:"#7a9abf",background:"#0b1120",border:"1px solid #1c2840",borderRadius:4,padding:"2px 10px",fontFamily:"'Noto Serif KR',serif",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{current.query}</span>
  <span style={{fontSize:9,fontWeight:700,color:current.mode==="extended"?"#c084fc":"#7db8f7",background:current.mode==="extended"?"#1e105044":"#1a2e4a",border:`1px solid ${current.mode==="extended"?"#c084fc33":"#3b82f633"}`,borderRadius:3,padding:"2px 8px",fontFamily:"'JetBrains Mono',monospace"}}>{current.mode==="extended"?"확장":"기본"}</span>
  </div>
- <AnalysisResult result={current.result} query={current.query} mode={current.mode} amendments={amendments}/>
+ <AnalysisResult result={current.result} query={current.query} mode={current.mode} amendments={amendments} onOpenClause={setGlobalViewingClause}/>
  </div>
  )}
  {!current && !loading && (
@@ -408,6 +429,7 @@ export default function IssueAnalyzer() {
  </div>
  )}
  </div>
+ {globalViewingClause && <ClauseDrawer clauseId={globalViewingClause} onClose={()=>setGlobalViewingClause(null)}/>}
  <style>{`@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}} *{box-sizing:border-box} ::-webkit-scrollbar{width:5px;height:5px} ::-webkit-scrollbar-track{background:#080c14} ::-webkit-scrollbar-thumb{background:#1c2840;border-radius:3px} ::selection{background:#1d4ed844;color:#93c5fd} textarea::placeholder{color:#2d4060}`}</style>
  </div>
  );
@@ -416,415 +438,413 @@ export default function IssueAnalyzer() {
 // --- CLAUSE FULL TEXT DB ------------------------------------------------------
 let CLAUSE_FULLTEXT = {
   "SAA-1.3.1": {
-    doc: "SAA",
-    section: "1.3.1",
-    title: "KT 독점 재판매권 (Target Market)",
-    text: "1.3.1      Notwithstanding anything to the contrary in Section 1.2, Palantir grants Partner the exclusive right in the Territory during the Term to resell and distribute Palantir Products to Target End Customers in the Target Market in the Territory, subject to the terms and conditions of this Agreement and timely payment in accordance with applicable order forms between the Parties (“Palantir Order Form(s)”). For the avoidance of doubt, the right granted under this Section shall not preclude any internal use of Palantir Products by Partner or its Affiliates, in accordance with the terms and conditions of this Agreement, subject to such use being in accordance with applicable Palantir Order Forms between the Parties.",
-    translation: "KT는 한국 금융·보험 분야에서 Palantir Products 독점 재판매권 보유. 단, 고객이 Palantir과 직접 계약 원할 시 EBT 조항(2.10) 적용.",
-    context: "KT 독점권의 범위와 한계 — Target Market 내 고객에 대한 Palantir 직접영업 금지 근거"
+    "doc": "SAA",
+    "section": "1.3.1",
+    "title": "KT 독점 재판매권 (Target Market)",
+    "text": "1.3.1      Notwithstanding anything to the contrary in Section 1.2, Palantir grants Partner the exclusive right in the Territory during the Term to resell and distribute Palantir Products to Target End Customers in the Target Market in the Territory, subject to the terms and conditions of this Agreement and timely payment in accordance with applicable order forms between the Parties (“Palantir Order Form(s)”). For the avoidance of doubt, the right granted under this Section shall not preclude any internal use of Palantir Products by Partner or its Affiliates, in accordance with the terms and conditions of this Agreement, subject to such use being in accordance with applicable Palantir Order Forms between the Parties.",
+    "translation": "[조항 ID] 1.3.1\n[조항 제목] KT 독점 재판매권 (Target Market)\n[원문]\n1.3.1 제1.2조의 내용과 상반되더라도, Palantir는 기간 동안 영토 내에서 영토의 대상 시장에 속하는 대상 최종 고객에게 Palantir Products를 재판매 및 배포할 독점권을 파트너에게 부여하되, 본 계약의 조건 및 양 당사자 간에 적용 가능한 Palantir 주문서에 따라 제때 지급되는 것을 전제로 한다(“Palantir Order Form(s)”). 의심의 여지를 없애기 위하여, 본 조에 따라 부여된 권리는 파트너 또는 그 계열사가 본 계약의 조건에 따라 Palantir Products를 내부적으로 사용하는 것을 배제하지 않으며, 다만 그러한 사용이 양 당사자 간에 적용 가능한 Palantir Order Form(s)에 따라 이루어지는 경우에 한한다.",
+    "context": "KT 독점권의 범위와 한계 — Target Market 내 고객에 대한 Palantir 직접영업 금지 근거"
   },
   "SAA-1.3.2": {
-    doc: "SAA",
-    section: "1.3.2",
-    title: "Palantir 직접 판매 금지",
-    text: "1.3.2      Palantir shall not during the Term independently sell Palantir Products by itself or form a business alliance in the Territory where Palantir grants a right to resell and distribute Palantir Products in the Target Market, without the prior consent of the Partner. Additionally, Palantir shall not, without the prior consent of the Partner, establish a new wholesale distributor or make any changes to the business structure in the Territory that would conflict with Partner’s rights granted under this Agreement.",
-    translation: "Palantir은 Term 동안 KT 동의 없이 Territory에서 Target Market 대상 독자 판매 또는 재판매 파트너 선임 불가.",
-    context: "Palantir의 직접영업 시 KT가 원용할 수 있는 핵심 조항 — 위반 시 material breach 주장 가능"
+    "doc": "SAA",
+    "section": "1.3.2",
+    "title": "Palantir 직접 판매 금지",
+    "text": "1.3.2      Palantir shall not during the Term independently sell Palantir Products by itself or form a business alliance in the Territory where Palantir grants a right to resell and distribute Palantir Products in the Target Market, without the prior consent of the Partner. Additionally, Palantir shall not, without the prior consent of the Partner, establish a new wholesale distributor or make any changes to the business structure in the Territory that would conflict with Partner’s rights granted under this Agreement.",
+    "translation": "[조항 ID] 1.3.2\n[조항 제목] Palantir 직접 판매 금지\n1.3.2      Palantir는 기간 동안 파트너의 사전 동의 없이, Palantir가 대상 시장에서 Palantir Products의 재판매 및 유통에 대한 권리를 부여하는 영역에서 Palantir Products를 독립적으로 자체 판매하거나 비즈니스 제휴를 형성하지 않는다. 또한 Palantir는 파트너의 사전 동의 없이, 본 계약에 따라 파트너에게 부여된 권리와 충돌하는 영역 내에서 신규 도매 유통업체를 설립하거나 사업 구조를 변경하지 않는다.",
+    "context": "Palantir의 직접영업 시 KT가 원용할 수 있는 핵심 조항 — 위반 시 material breach 주장 가능"
   },
   "SAA-1.6.8": {
-    doc: "SAA",
-    section: "1.6.8",
-    title: "Other Market Co-Sell 의무",
-    text: "1.6.8      Palantir agrees that, during the Term, with respect to any proposed sale of Palantir Products to Other Market Customers in the Territory by Palantir, it shall provide the Partner with a good faith opportunity to engage in co-selling activities related to such opportunity. With respect to any proposed sale of Palantir Products to Other Market Customers (including those not listed in Appendix 7) in the Territory by the Partner, Partner shall submit the proposal in the Palantir Partner Portal and Palantir shall review opportunity to engage in co-selling with the Partner for such opportunity, with the ultimate decision being at Palantir’s absolute discretion. For the avoidance of doubt, Partner is not permitted to actively market Palantir Products or Partner being a Palantir Premium",
-    translation: "Palantir이 Other Market 고객에 판매 시 KT에 co-sell 기회 부여 의무. Partner도 파트너 포털 등록 후 진행.",
-    context: "Other Market(Appendix 7) 대상 영업 시 co-sell 절차 미준수 여부 판단 기준"
+    "doc": "SAA",
+    "section": "1.6.8",
+    "title": "Other Market Co-Sell 의무",
+    "text": "1.6.8      Palantir agrees that, during the Term, with respect to any proposed sale of Palantir Products to Other Market Customers in the Territory by Palantir, it shall provide the Partner with a good faith opportunity to engage in co-selling activities related to such opportunity. With respect to any proposed sale of Palantir Products to Other Market Customers (including those not listed in Appendix 7) in the Territory by the Partner, Partner shall submit the proposal in the Palantir Partner Portal and Palantir shall review opportunity to engage in co-selling with the Partner for such opportunity, with the ultimate decision being at Palantir’s absolute discretion. For the avoidance of doubt, Partner is not permitted to actively market Palantir Products or Partner being a Palantir Premium",
+    "translation": "1.6.8      타 시장 공동 판매 의무\nPalantir는 계약 기간 동안 Palantir가 영토 내의 타 시장 고객에게 Palantir Products를 판매하려는 제안된 판매와 관련하여, 해당 기회와 관련된 공동 판매 활동에 파트너가 참여할 수 있는 선의의 기회를 제공해야 한다. 영토 내에서 Partner가 타 시장 고객(부록 7에 기재되지 않은 고객 포함)에게 Palantir Products의 제안된 판매를 하는 경우, Partner는 Palantir 파트너 포털에 제안을 제출해야 하며 Palantir는 해당 기회에 대해 Partner와 공동 판매에 참여할 기회를 검토하고, 최종 결정은 Palantir의 절대적 재량에 따른다. 의심의 여지를 없애기 위하여, 파트너는 Palantir Products를 적극적으로 마케팅하는 행위를 해서는 안 되며, 파트너가 Palantir Premium인 경우도 허용되지 않는다.",
+    "context": "Other Market(Appendix 7) 대상 영업 시 co-sell 절차 미준수 여부 판단 기준"
   },
   "SAA-2.10": {
-    doc: "SAA",
-    section: "2.10",
-    title: "EBT (Extraordinary Bilateral Transaction)",
-    text: "2.10       Extraordinary Bilateral Transactions Attributable to Hurdle. A transaction where Partner finds, cultivates, registers, and prepares for finalizing an opportunity with a Target End Customer pursuant to this Agreement but where (a) the Target End Customer communicates that it desires to contract directly with Palantir rather than Partner for purposes of executing the specific opportunity, and (b) Palantir and such Target End Customer finally enter into a contract for such specific opportunity resulting directly from Partner’s efforts pursuant to this Agreement without Partner receiving revenue that would have been defined as Net Revenue attributable to a Qualified Sale Contract that",
-    translation: "KT가 발굴한 Target Market 고객이 Palantir과 직접 계약한 경우, 해당 매출을 Hurdle에 산입할지 협의. KT는 Partner Compensation 수령 불가능하지만 Hurdle 기여는 인정될 수 있음.",
-    context: "EBT는 Target Market 내에서만 적용 — KT가 발굴했어도 Palantir 직접 계약이 성립된 경우의 처리 기준"
+    "doc": "SAA",
+    "section": "2.10",
+    "title": "EBT (Extraordinary Bilateral Transaction)",
+    "text": "2.10 Extraordinary Bilateral Transactions Attributable to Hurdle. A transaction where Partner finds, cultivates, registers, and prepares for finalizing an opportunity with a Target End Customer pursuant to this Agreement but where (a) the Target End Customer communicates that it desires to contract directly with Palantir rather than Partner for purposes of executing the specific opportunity, and (b) Palantir and such Target End Customer finally enter into a contract for such specific opportunity resulting directly from Partner's efforts pursuant to this Agreement without Partner receiving revenue that would have been defined as Net Revenue attributable to a Qualified Sale Contract that Partner would have executed but for Palantir's contracting, can be treated as an \"Extraordinary Bilateral Transaction\". In such case, the Parties will meet to discuss and evaluate Partner's activities for such Extraordinary Bilateral Transaction and determine whether to reasonably find that Partner has made and/or will continue to make contribution to Palantir's obtaining revenue from such Extraordinary Bilateral Transaction and whether to consider all or a portion of Palantir's obtained revenue to be counted as Net Revenue.\n\n2.10.1 If the Parties mutually agree that all or a portion of Palantir's obtained revenue from the Extraordinary Bilateral Transaction should be counted as Net Revenue, then it shall be applied to calculation of the Hurdle, except where the Hurdle is exhausted in which case the parties will mutually agree whether the Partner will receive any Partner Compensation for the Extraordinary Bilateral Transaction; and\n\n2.10.2 On a quarterly basis, Palantir shall report to Partner the Net Revenue arising from such Extraordinary Bilateral Transactions, and the Net Revenue arising from such Extraordinary Bilateral Transactions shall be deducted from Partner's next payment arising under Order Form #2 (or provided to Partner as credit if Partner has finished all payments arising under Order Form #2).\n\n2.10.3 The Parties shall in good faith discuss procedures and criteria regarding how to evaluate Partner's contribution for prospective Extraordinary Bilateral Transactions and use their reasonable efforts to reach agreement for this purpose.",
+    "translation": "[조항 ID] 2.10\n[조항 제목] 허들에 귀속되는 예외적 쌍방 거래(Extraordinary Bilateral Transaction)\n2.10 허들에 귀속되는 예외적 쌍방 거래. 본 계약에 따라 파트너가 타깃 최종고객과의 기회를 발굴, 육성, 등록하고 최종 계약 체결을 준비하였으나, (a) 해당 타깃 최종고객이 해당 특정 기회의 수행 목적상 파트너가 아니라 Palantir와 직접 계약하기를 원한다고 통지하고, (b) 그 결과 Palantir와 해당 타깃 최종고객이 본 계약에 따른 파트너의 노력으로 직접 발생한 해당 특정 기회에 관하여 최종 계약을 체결하되, 파트너가 Palantir의 직접 계약이 없었더라면 파트너가 체결했을 적격 재판매계약(Qualified Sale Contract)에 귀속되는 순매출(Net Revenue)로 보았을 수익을 수취하지 못하는 경우, 해당 거래는 \"예외적 쌍방 거래(Extraordinary Bilateral Transaction)\"로 취급될 수 있다. 이 경우 당사자들은 회합하여 해당 예외적 쌍방 거래에 관한 파트너의 활동을 논의하고 평가하며, 파트너가 Palantir의 해당 예외적 쌍방 거래 수익 획득에 기여했거나 계속 기여할 것인지 여부를 합리적으로 판단하고, Palantir가 획득한 수익의 전부 또는 일부를 순매출(Net Revenue)로 산입할지 여부를 결정한다.\n\n2.10.1 당사자들이 예외적 쌍방 거래에서 Palantir가 획득한 수익의 전부 또는 일부를 순매출(Net Revenue)로 산입하기로 상호 합의하는 경우, 해당 금액은 허들(Hurdle) 산정에 반영한다. 단, 허들이 이미 소진된 경우에는 파트너가 해당 예외적 쌍방 거래에 대해 파트너 보상(Partner Compensation)을 수령할지 여부를 당사자들이 상호 합의한다.\n\n2.10.2 Palantir는 분기별로 해당 예외적 쌍방 거래에서 발생한 순매출(Net Revenue)을 파트너에게 보고해야 하며, 그러한 순매출은 Order Form #2에 따라 발생하는 파트너의 차기 지급액에서 공제된다(또는 파트너가 Order Form #2에 따른 모든 지급을 이미 완료한 경우에는 파트너에게 크레딧으로 제공된다).\n\n2.10.3 당사자들은 장래의 예외적 쌍방 거래에 대한 파트너 기여도를 어떻게 평가할지에 관한 절차와 기준을 성실히(good faith) 협의하고, 이를 위한 합의에 도달하도록 합리적인 노력을 다한다.",
+    "context": "EBT는 Target Market 내에서만 적용 — KT가 발굴했어도 Palantir 직접 계약이 성립된 경우의 처리 기준"
   },
   "SAA-2.11": {
-    doc: "SAA",
-    section: "2.11",
-    title: "Surviving QRC 배분 (계약 종료 후)",
-    text: "2.11       Surviving Qualified Resale Contracts. Upon termination of the Agreement or this Commercial Annex, the Hurdle will become inapplicable, and all Net Revenue arising from a Surviving Qualified Resale Contract will be allocated as follows: 10% to Partner and 90% to Palantir (via Upstream Payments), respectively.",
-    translation: "SAA 종료 후 Surviving QRC에서 발생하는 Net Revenue는 KT 10% / Palantir 90% 고정 배분. Hurdle은 더 이상 적용되지 않음.",
-    context: "해지 후 잔여 수익 배분 — 협상 여지 없이 10/90 고정 적용"
+    "doc": "SAA",
+    "section": "2.11",
+    "title": "Surviving QRC 배분 (계약 종료 후)",
+    "text": "2.11       Surviving Qualified Resale Contracts. Upon termination of the Agreement or this Commercial Annex, the Hurdle will become inapplicable, and all Net Revenue arising from a Surviving Qualified Resale Contract will be allocated as follows: 10% to Partner and 90% to Palantir (via Upstream Payments), respectively.",
+    "translation": "2.11 생존 QRC 배분(계약 종료 후). 계약 또는 본 상업 부속서의 종료 시, 허들은 적용되지 않으며, 생존하는 QRC 계약으로부터 발생하는 모든 순매출은 다음과 같이 배분됩니다: 파트너에게 10%, Palantir에게 90% (Upstream Payments를 통해), 각각.",
+    "context": "해지 후 잔여 수익 배분 — 협상 여지 없이 10/90 고정 적용"
   },
   "SAA-6.2": {
-    doc: "SAA",
-    section: "6.2",
-    title: "계약 해지 (Material Breach)",
-    text: "Termination. This Agreement, and any Schedule entered into hereunder, may be terminated (a) upon mutual agreement; or (b) by either Party for material breach (including for the avoidance of doubt where Partner promotes Palantir Products outside the scope of this Agreement) by the other Party upon twenty (20) days’ written notice identifying the material breach unless the breach is cured within such notice period. For the avoidance of doubt, any valid termination of this Agreement shall also terminate any Schedule in effect at the time of such termination unless otherwise apparent on the terms set out in any such Schedule; however, any valid termination or expiration of a Schedule shall not in and of itself terminate this Agreement.",
-    translation: "상호 합의 또는 material breach 시 20일 서면 통보 후 해지 가능. Partner의 계약 범위 외 영업도 material breach에 해당.",
-    context: "20일 치유 기간 — TOS §8.4 즉시정지권과 충돌(XC-004). KT가 위반자일 경우 역적용 주의"
+    "doc": "SAA",
+    "section": "6.2",
+    "title": "계약 해지 (Material Breach)",
+    "text": "Termination. This Agreement, and any Schedule entered into hereunder, may be terminated (a) upon mutual agreement; or (b) by either Party for material breach (including for the avoidance of doubt where Partner promotes Palantir Products outside the scope of this Agreement) by the other Party upon twenty (20) days’ written notice identifying the material breach unless the breach is cured within such notice period. For the avoidance of doubt, any valid termination of this Agreement shall also terminate any Schedule in effect at the time of such termination unless otherwise apparent on the terms set out in any such Schedule; however, any valid termination or expiration of a Schedule shall not in and of itself terminate this Agreement.",
+    "translation": "해지. 본 계약 및 본 계약에 따라 체결된 모든 부속합의는 (a) 상호 합의에 의하여; 또는 (b) 상대 당사자의 중대한 위반으로 인해, 그 위반 사실을 식별하는 서면 통지를 20일의 기간 동안 상대 당사자에게 발송한 후 그 기간 내에 위반이 시정되지 않는 경우에 해지될 수 있다(단, 이 위반에는 파트너가 Palantir Products를 본 계약의 범위를 벗어나 홍보하는 경우를 포함한다). 의심의 여지를 없애기 위하여, 본 계약의 유효한 해지는 해지 시점에 그때까지 효력이 있는 모든 부속합의도 해지시키며, 다만 해당 부속합의의 조건에 달리 명시된 경우를 제외한다; 다만, 부속합의의 유효한 해지 또는 만료가 이루어지더라도 본 계약 자체가 자동으로 해지되지는 않는다.",
+    "context": "20일 치유 기간 — TOS §8.4 즉시정지권과 충돌(XC-004). KT가 위반자일 경우 역적용 주의"
   },
   "SAA-6.3": {
-    doc: "SAA",
-    section: "6.3",
-    title: "해지 효과 및 잔여 처리",
-    text: "Effect of Termination. Upon termination of this Agreement, Partner’s right of access to Palantir’s software and related products shall automatically terminate, and each Party will (a) cease holding itself out as in any way affiliated or having any business relationship with the other Party; (b) discontinue all authorized publicity or use of any Approved Marketing Materials except as otherwise expressly agreed in writing by the Parties; and (c) return or destroy the other Party’s Confidential Information in its possession. Termination is not an exclusive remedy and all other remedies at law, in",
-    translation: "해지 시 접근권 자동 종료. Hurdle 미달성 시 Surviving QRC 수익은 good faith 협상. OF4 잔여 Fee는 ratable 기준으로 처리.",
-    context: "해지 후 OF4 잔여 Fee 처리 방식 — SAA(협상) vs OF4(ratable) 충돌(XC-005)"
+    "doc": "SAA",
+    "section": "6.3",
+    "title": "해지 효과 및 잔여 처리",
+    "text": "Effect of Termination. Upon termination of this Agreement, Partner’s right of access to Palantir’s software and related products shall automatically terminate, and each Party will (a) cease holding itself out as in any way affiliated or having any business relationship with the other Party; (b) discontinue all authorized publicity or use of any Approved Marketing Materials except as otherwise expressly agreed in writing by the Parties; and (c) return or destroy the other Party’s Confidential Information in its possession. Termination is not an exclusive remedy and all other remedies at law, in",
+    "translation": "해지의 효과. 본 계약이 해지될 경우 Palantir의 소프트웨어 및 관련 제품에 대한 파트너의 접근 권한은 자동으로 종료되며, 각 당사자는 (a) 상대 당사자와 어떠한 형태로든 제휴하거나 사업 관계를 가진 것으로 더 이상 표기하지 않는다; (b) 당사자들이 서면으로 달리 명시적으로 합의한 경우를 제외하고는 모든 Authorized Publicity(허가된 홍보) 또는 Approved Marketing Materials의 사용을 중단한다; (c) 보유 중인 상대 당사자의 Confidential Information을 반환하거나 파기한다. 해지는 독점적 구제책이 아니며 모든 다른 구제책은 법률에 따른...",
+    "context": "해지 후 OF4 잔여 Fee 처리 방식 — SAA(협상) vs OF4(ratable) 충돌(XC-005)"
   },
   "SAA-7.1": {
-    doc: "SAA",
-    section: "7.1",
-    title: "비밀유지",
-    text: "Confidentiality. Each Party (the “Receiving Party”) shall keep strictly confidential all Confidential Information of the other Party (the “Disclosing Party”), and shall not use such Confidential Information except for the purposes of this Agreement, and shall not disclose such Confidential Information to any third party other than disclosure on a need-to-know basis to the Receiving Party’s directors, employees, agents, attorneys, accountants, subcontractors, or other representatives who are each subject to obligations of confidentiality at least as restrictive as those herein (“Authorized Repr",
-    translation: "양 당사자는 상대방 기밀정보를 엄격히 비밀로 유지. 법원/정부 명령 시에도 사전 통보 의무. 계약 종료 후 5년 존속.",
-    context: "기밀유지 의무 위반 시 손해배상 및 injunction 청구 가능"
+    "doc": "SAA",
+    "section": "7.1",
+    "title": "비밀유지",
+    "text": "Confidentiality. Each Party (the “Receiving Party”) shall keep strictly confidential all Confidential Information of the other Party (the “Disclosing Party”), and shall not use such Confidential Information except for the purposes of this Agreement, and shall not disclose such Confidential Information to any third party other than disclosure on a need-to-know basis to the Receiving Party’s directors, employees, agents, attorneys, accountants, subcontractors, or other representatives who are each subject to obligations of confidentiality at least as restrictive as those herein (“Authorized Repr",
+    "translation": "비밀유지. 각 당사자(이하 '수령당사자')는 상대 당사자(이하 '공개당사자')의 모든 기밀 정보를 엄격하게 기밀로 유지하고, 본 계약의 목적 이외의 용도로 그러한 기밀 정보를 사용하지 않으며, 필요에 따라 알아야 할 범위로 수령당사자의 이사들, 직원들, 대리인들, 변호사들, 회계사들, 하도급자들, 또는 본 계약에 따라 기밀 유지 의무가 본 계약에 규정된 의무들보다 적어도 더 엄격한 의무를 부담하는 기타 대표자들에게 공개하는 경우를 제외하고는 어떠한 제3자에게도 그러한 기밀 정보를 공개하지 아니한다(“Authorized Representatives”).",
+    "context": "기밀유지 의무 위반 시 손해배상 및 injunction 청구 가능"
   },
   "SAA-8.1": {
-    doc: "SAA",
-    section: "8.1",
-    title: "상호 면책 (Indemnification)",
-    text: "Indemnification. Each Party shall indemnify, defend, and hold harmless the other Party against any costs, attorneys’ fees, and damages or settlement amount resulting from any third party claim asserted against the indemnified Party that arises in connection with this Agreement based on: (a) misrepresentations or fraudulent statements, false or misleading advertising, or breach of Section 5 this Agreement by the indemnifying Party regarding either Party’s products or services; (b) services provided to the third party by the indemnifying Party (including any professional services that may be pro",
-    translation: "허위진술, 서비스 하자, 중과실로 인한 제3자 클레임에 대해 상호 면책 의무.",
-    context: "IP 침해, 서비스 하자 관련 클레임 시 책임 귀속 판단 기준"
+    "doc": "SAA",
+    "section": "8.1",
+    "title": "상호 면책 (Indemnification)",
+    "text": "Indemnification. Each Party shall indemnify, defend, and hold harmless the other Party against any costs, attorneys’ fees, and damages or settlement amount resulting from any third party claim asserted against the indemnified Party that arises in connection with this Agreement based on: (a) misrepresentations or fraudulent statements, false or misleading advertising, or breach of Section 5 this Agreement by the indemnifying Party regarding either Party’s products or services; (b) services provided to the third party by the indemnifying Party (including any professional services that may be pro",
+    "translation": "[조항 ID] 8.1\n[조항 제목] 상호 면책 (Indemnification)\n면책. 각 당사자는 본 계약과 관련하여 제3자 청구로 인해 면책당하는 당사자에 제기된 비용, 변호사 수수료, 손해배상 또는 합의금에 대해 상대방 당사자를 보상하고 방어하며 면책한다. 이는 (a) 면책당하는 당사자가 어느 당사자의 제품 또는 서비스에 관하여 한 허위 진술 또는 사기성 진술, 거짓 또는 오해의 여지가 있는 광고, 또는 본 계약의 제5조 위반으로 인한 것; (b) 면책하는 당사자가 제3자에게 제공한 서비스(여기에 면책하는 당사가 제공할 수 있는 전문 서비스가 포함될 수 있음)로 인해 발생한 것 pro",
+    "context": "IP 침해, 서비스 하자 관련 클레임 시 책임 귀속 판단 기준"
   },
   "SAA-8.2": {
-    doc: "SAA",
-    section: "8.2",
-    title: "Liability Cap (SAA)",
-    text: "Limitation of Liability. TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, NEITHER PARTY SHALL BE LIABLE TO THE OTHER, WHETHER BASED ON CONTRACT, TORT (INCLUDING NEGLIGENCE), OR ANY OTHER LEGAL OR EQUITABLE THEORY, FOR ANY (A) COST OF PROCUREMENT OF ANY SUBSTITUTE PRODUCTS OR SERVICES, (B) ECONOMIC LOSSES, EXPECTED OR LOST PROFITS, REVENUE, OR ANTICIPATED SAVINGS, LOSS OF BUSINESS, LOSS OF CONTRACTS, LOSS OF OR DAMAGE TO GOODWILL OR REPUTATION, AND/OR (C) INDIRECT, SPECIAL, INCIDENTAL, PUNITIVE, OR CONSEQUENTIAL LOSS OR DAMAGE, WHETHER ARISING OUT OF PERFORMANCE OR BREACH OF THIS AGREEMENT, E",
-    translation: "최대 책임: max(직전 12개월 Partner Compensation, USD $10M). 간접손해·일실이익 배제. TOS §12의 $100K Cap과 충돌(XC-002).",
-    context: "분쟁 시 KT가 청구할 수 있는 최대 금액 — SAA($10M) vs TOS($100K) 어느 Cap이 적용되는지 선결 문제"
+    "doc": "SAA",
+    "section": "8.2",
+    "title": "Liability Cap (SAA)",
+    "text": "Limitation of Liability. TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, NEITHER PARTY SHALL BE LIABLE TO THE OTHER, WHETHER BASED ON CONTRACT, TORT (INCLUDING NEGLIGENCE), OR ANY OTHER LEGAL OR EQUITABLE THEORY, FOR ANY (A) COST OF PROCUREMENT OF ANY SUBSTITUTE PRODUCTS OR SERVICES, (B) ECONOMIC LOSSES, EXPECTED OR LOST PROFITS, REVENUE, OR ANTICIPATED SAVINGS, LOSS OF BUSINESS, LOSS OF CONTRACTS, LOSS OF OR DAMAGE TO GOODWILL OR REPUTATION, AND/OR (C) INDIRECT, SPECIAL, INCIDENTAL, PUNITIVE, OR CONSEQUENTIAL LOSS OR DAMAGE, WHETHER ARISING OUT OF PERFORMANCE OR BREACH OF THIS AGREEMENT, E",
+    "translation": "[조항 ID] 8.2\n[조항 제목] 책임 한도 (SAA)\n책임의 한도. 적용 가능한 법률이 허용하는 최대한의 범위 내에서, 당사자 어느 쪽도 상대방에 대하여 계약, 불법행위(과실 포함), 또는 기타 법적 또는 형평에 관한 이론에 기초하더라도, (A) 대체 상품 또는 서비스의 조달 비용, (B) 경제적 손실, 예상되었거나 손실된 이익, 수익, 또는 예상되는 절감, 사업의 손실, 계약의 손실, 신용도 또는 평판의 상실 또는 손상, 및/또는 (C) 간접적, 특수적, 우발적, 징벌적, 또는 결과적 손실 또는 손상, 본 계약의 이행 또는 위반으로 인해 발생하였는지 여부에 관계없이, E",
+    "context": "분쟁 시 KT가 청구할 수 있는 최대 금액 — SAA($10M) vs TOS($100K) 어느 Cap이 적용되는지 선결 문제"
   },
   "SAA-9.0": {
-    doc: "SAA",
-    section: "9.0",
-    title: "준거법 및 중재 (SAA)",
-    text: "Any dispute, controversy, or claim arising from or relating to this Agreement, including arbitrability, that cannot be resolved following good faith discussions within sixty (60) days after notice of a dispute shall be finally settled by arbitration. If Partner is located in the Americas, then the governing law shall be the substantive laws of the State of New York, without regard to conflicts of law provisions thereof, and arbitration shall be administered in New York, New York, United States under the Comprehensive Arbitration Rules and Procedures of the Judicial Arbitration and Mediation Se",
-    translation: "분쟁은 60일 협의 후 ICC 중재로 해결. 한국 소재 Partner → 한국법 적용, 서울 중재. TOS §13 영국법과 충돌(XC-003).",
-    context: "어느 준거법이 적용되는지 먼저 확정해야 모든 법적 분석의 기초가 성립"
+    "doc": "SAA",
+    "section": "9.0",
+    "title": "준거법 및 중재 (SAA)",
+    "text": "Any dispute, controversy, or claim arising from or relating to this Agreement, including arbitrability, that cannot be resolved following good faith discussions within sixty (60) days after notice of a dispute shall be finally settled by arbitration. If Partner is located in the Americas, then the governing law shall be the substantive laws of the State of New York, without regard to conflicts of law provisions thereof, and arbitration shall be administered in New York, New York, United States under the Comprehensive Arbitration Rules and Procedures of the Judicial Arbitration and Mediation Se",
+    "translation": "[조항 ID] 9.0\n[조항 제목] 준거법 및 중재 (SAA)\n본 계약으로부터 발생하거나 본 계약과 관련된 모든 분쟁, 논쟁 또는 청구(중재 가능성을 포함), 분쟁에 대한 통지 후 60일 이내에 선의의 협의를 통해 해결되지 않는 경우에는 최종적으로 중재에 의해 해결된다. 파트너가 미주 지역에 위치하는 경우, 준거법은 뉴욕주 실체법으로 하고, 충돌법 조항은 적용하지 아니하며, 중재는 미국 뉴욕주 뉴욕시에서 Judicial Arbitration and Mediation Services의 Comprehensive Arbitration Rules and Procedures에 따라 관리된다.",
+    "context": "어느 준거법이 적용되는지 먼저 확정해야 모든 법적 분석의 기초가 성립"
   },
   "SAA-2.2": {
-  doc: "SAA",
-  section: "Section 2.2 (Commercial Annex)",
-  title: "QRC 계약 조건 및 End Customer 책임",
-  text: "Partner will independently determine the pricing at which it offers Palantir Products to End Customers. Partner will be solely responsible for collecting all fees from End Customers and making payment to Palantir. Non-payment by End Customers will not relieve Partner of its obligation to pay fees to Palantir. Palantir reserves the right to terminate this Agreement if it fails to receive payment from Partner.",
-  translation: "KT는 독립적으로 End Customer 가격 결정. End Customer 미지급과 무관하게 KT의 Palantir 지급 의무 존속. Palantir은 미수금 시 계약 해지 가능.",
-  kt_risk: "End Customer가 KT에 대금을 미지급해도 KT는 Palantir에 지급해야 함. KT가 End Customer 신용 위험을 전부 부담. 대손 리스크 관리 필수."
- },
- "SAA-2.8": {
-  doc: "SAA",
-  section: "Section 2.8 (Commercial Annex)",
-  title: "Upstream Payment 의무 및 환율 기준",
-  text: "Only in the case that aggregate Net Revenue is equal to or greater than the Hurdle, Partner shall forward to Palantir the full payment amount of the Net Revenue minus any applicable Partner Compensation (the Upstream Payment) within 30 days of Partner receiving an invoice. All USD conversions shall use the OANDA spot rate on the date of payment to Palantir. Partner shall be responsible for the payment of any and all taxes on payments received from an End Customer.",
-  translation: "Hurdle 달성 후 Net Revenue에서 Partner Compensation 차감 후 30일 내 Upstream Payment. 환율은 OANDA 기준. KT가 세금 전액 부담.",
-  kt_risk: "Hurdle 달성 후 End Customer 수금 30일 내 Upstream Payment 의무. 환율 변동(OANDA 기준)에 따른 환차손 KT 부담. 세금 공제 불가."
- },
- "SAA-2.9": {
-  doc: "SAA",
-  section: "Section 2.9 (Commercial Annex)",
-  title: "분기 보고 의무 및 감사 권한",
-  text: "By the first business day of every quarter, Partner shall submit a report of all Qualified Resale Contracts executed in such quarter and for which payments are ongoing. Partner will maintain complete, clear and accurate records of its transactions and performance under this Agreement. Upon 10 days advance written notice, Partner will permit Palantir or its representative to audit Partner records. Partner will maintain all records for at least 3 years following expiration or termination.",
-  translation: "매 분기 첫 영업일에 QRC 현황 보고 필수. Palantir은 10일 사전 통보 후 감사 가능. 계약 종료 후 3년간 기록 보관 의무.",
-  kt_risk: "분기 보고 미제출 시 계약 위반. Palantir의 감사 요청 시 협조 의무. 3년치 거래 기록 보관 필수."
- },
- "SAA-10.4": {
-    doc: "SAA",
-    section: "10.4",
-    title: "독립 개발권",
-    text: "Right to Independently Develop. Subject to any obligations of confidentiality and to the Parties’ respective intellectual property rights, in no event shall either Party be precluded or restricted from developing, using, marketing, or providing for itself or for others, materials that are competitive with the products and services of the other Party, irrespective of their similarity to any products or services offered by the other Party in connection with this Agreement, provided that the materi",
-    translation: "기밀정보 미사용 시 양 당사자 모두 경쟁 제품 독립 개발 가능. KT 기밀 활용한 경우에만 제한.",
-    context: "Palantir의 유사 솔루션 독립 개발 시 기밀 사용 여부가 핵심 쟁점"
+    "doc": "SAA",
+    "section": "Section 2.2 (Commercial Annex)",
+    "title": "QRC 계약 조건 및 End Customer 책임",
+    "text": "Partner will independently determine the pricing at which it offers Palantir Products to End Customers. Partner will be solely responsible for collecting all fees from End Customers and making payment to Palantir. Non-payment by End Customers will not relieve Partner of its obligation to pay fees to Palantir. Palantir reserves the right to terminate this Agreement if it fails to receive payment from Partner.",
+    "translation": "[조항 ID] Section 2.2 (Commercial Annex)\n[조항 제목] QRC 계약 조건 및 End Customer 책임\n파트너는 최종 고객에게 Palantir 제품을 제공하는 가격을 독립적으로 결정합니다. 파트너는 최종 고객으로부터 모든 수수료를 수집하고 Palantir에 지급하는 데 단독으로 책임을 집니다. 최종 고객의 미지급은 파트너가 Palantir에 수수료를 지급해야 할 의무를 면제하지 않습니다. Palantir는 파트너로부터 대금을 받지 못하는 경우 본 계약을 해지할 권리를 보유합니다.",
+    "kt_risk": "End Customer가 KT에 대금을 미지급해도 KT는 Palantir에 지급해야 함. KT가 End Customer 신용 위험을 전부 부담. 대손 리스크 관리 필수."
+  },
+  "SAA-2.8": {
+    "doc": "SAA",
+    "section": "Section 2.8 (Commercial Annex)",
+    "title": "Upstream Payment 의무 및 환율 기준",
+    "text": "Only in the case that aggregate Net Revenue is equal to or greater than the Hurdle, Partner shall forward to Palantir the full payment amount of the Net Revenue minus any applicable Partner Compensation (the Upstream Payment) within 30 days of Partner receiving an invoice. All USD conversions shall use the OANDA spot rate on the date of payment to Palantir. Partner shall be responsible for the payment of any and all taxes on payments received from an End Customer.",
+    "translation": "[조항 ID] Section 2.8 (Commercial Annex)\n[조항 제목] Upstream Payment 의무 및 환율 기준\n[본문]\n집계된 Net Revenue가 허들(Hurdle)에 해당되거나 그 이상인 경우에 한하여, Partner는 Net Revenue에서 적용 가능한 Partner Compensation를 차감한 전체 지급 금액(Upstream Payment)을 Palantir에게 청구서를 수령한 날로부터 30일 이내에 송부해야 한다. 모든 USD 환산은 Palantir에 대한 지급일의 OANDA 현물환율을 사용한다. Partner는 End Customer로부터 받는 지급에 대한 모든 세금의 납부에 책임을 진다.",
+    "kt_risk": "Hurdle 달성 후 End Customer 수금 30일 내 Upstream Payment 의무. 환율 변동(OANDA 기준)에 따른 환차손 KT 부담. 세금 공제 불가."
+  },
+  "SAA-2.9": {
+    "doc": "SAA",
+    "section": "Section 2.9 (Commercial Annex)",
+    "title": "분기 보고 의무 및 감사 권한",
+    "text": "By the first business day of every quarter, Partner shall submit a report of all Qualified Resale Contracts executed in such quarter and for which payments are ongoing. Partner will maintain complete, clear and accurate records of its transactions and performance under this Agreement. Upon 10 days advance written notice, Partner will permit Palantir or its representative to audit Partner records. Partner will maintain all records for at least 3 years following expiration or termination.",
+    "translation": "[조항 ID] Section 2.9 (Commercial Annex)\n[조항 제목] 분기 보고 의무 및 감사 권한\n[원문]\n매 분기의 첫 영업일까지, 파트너는 해당 분기에 체결되었고 지급이 진행 중인 모든 적격 재판매 계약에 관한 보고서를 제출해야 한다. 파트너는 본 계약에 따라 거래 및 이행에 관한 완전하고 명확하며 정확한 기록을 유지할 것이다. 파트너는 10일의 사전 서면 통지에 따라 Palantir 또는 그 대리인이 파트너의 기록을 감사하는 것을 허용할 것이다. 파트너는 만료 또는 종료 후 최소 3년간 모든 기록을 보관할 것이다.",
+    "kt_risk": "분기 보고 미제출 시 계약 위반. Palantir의 감사 요청 시 협조 의무. 3년치 거래 기록 보관 필수."
+  },
+  "SAA-10.4": {
+    "doc": "SAA",
+    "section": "10.4",
+    "title": "독립 개발권",
+    "text": "10.4 Right to Independently Develop. Subject to any obligations of confidentiality and to the Parties' respective intellectual property rights, in no event shall either Party be precluded or restricted from developing, using, marketing, or providing for itself or for others, materials that are competitive with the products and services of the other Party, irrespective of their similarity to any products or services offered by the other Party in connection with this Agreement, provided that the materials are independently developed without use of any Confidential Information of the other Party, by employees of the first Party who have had no access to any such Confidential Information. Each Party acknowledges that the other may already possess or have developed such materials independently. In addition, each Party shall be free to use its general knowledge, skills, experience, ideas, concepts, know-how, and techniques within the scope of its business that are used or developed in connection with the Agreement.",
+    "translation": "[조항 ID] 10.4\n[조항 제목] 독립 개발권\n10.4 독립적으로 개발할 권리(Right to Independently Develop). 비밀유지에 관한 의무 및 당사자 각자의 지식재산권을 전제로 하는 한, 어느 당사자도 상대방의 제품 및 서비스와 경쟁되는 자료를 자신을 위하여 또는 타인을 위하여 개발, 사용, 마케팅 또는 제공하는 행위로부터 어떠한 경우에도 배제되거나 제한되지 아니한다. 이 원칙은 해당 자료가 본 계약과 관련하여 상대방이 제공하는 제품 또는 서비스와 유사한지 여부와 관계없이 동일하게 적용된다. 다만 이러한 자료는, 상대방의 어떠한 기밀정보도 사용하지 않고, 또한 그러한 기밀정보에 접근한 바 없는 제1당사자의 직원들에 의해 독립적으로 개발된 것이어야 한다. 각 당사자는 상대방이 이미 그러한 자료를 보유하고 있거나, 또는 독립적으로 개발해 왔거나 개발했을 수 있음을 인정한다. 또한 각 당사자는 본 계약과 관련하여 사용되거나 개발된 범위 내에서, 자신의 일반적 지식, 기술, 경험, 아이디어, 개념, 노하우 및 기법을 자유롭게 사용할 수 있다.",
+    "context": "Palantir의 유사 솔루션 독립 개발 시 기밀 사용 여부가 핵심 쟁점"
   },
   "TOS-7": {
-    doc: "TOS",
-    section: "7",
-    title: "Fees, Payment, 연체이자",
-    text: "7. Fees and Payment; Taxes. The Service is deemed delivered upon the provision of access to Customer or for Customer’s benefit. If there are fixed fees set forth in an Order Form, such fees will be invoiced and payable on an upfront basis, or as otherwise set forth in the Order Form. Any usage-based fees set forth in an Order Form, including if payable in excess of any applicable included usage specified in an Order Form, will be calculated in accordance with the usage rates set forth in the Order Form (as applicable) and invoiced and payable quarterly in arrears, or as otherwise set forth in ",
-    translation: "서비스는 접근 제공 시 납품 완료로 간주. 고정 Fee는 선지급. 연체 시 월 1.5%(연 18%) 이자. TOS 준거법에 따른 이율 — 하도급법 기준과 충돌(EC-001).",
-    context: "대금 연체 시 적용 이율 — TOS 월 1.5% vs 하도급법 공정위 고시 이율"
+    "doc": "TOS",
+    "section": "7",
+    "title": "Fees, Payment, 연체이자",
+    "text": "7. Fees and Payment; Taxes. The Service is deemed delivered upon the provision of access to Customer or for Customer’s benefit. If there are fixed fees set forth in an Order Form, such fees will be invoiced and payable on an upfront basis, or as otherwise set forth in the Order Form. Any usage-based fees set forth in an Order Form, including if payable in excess of any applicable included usage specified in an Order Form, will be calculated in accordance with the usage rates set forth in the Order Form (as applicable) and invoiced and payable quarterly in arrears, or as otherwise set forth in ",
+    "translation": "[조항 ID] 7\n[조항 제목] 수수료 및 결제; 연체이자\n[원문]\n7. Fees and Payment; Taxes. 서비스는 고객에 대한 접속 권한의 제공 또는 고객의 이익을 위한 접속이 제공되는 시점에 인도된 것으로 간주된다. 주문서에 고정 수수료가 명시된 경우, 해당 수수료는 선지급 방식으로 청구 및 지급되거나 주문서에 달리 규정된 방식으로 지급된다. 주문서에 명시된 이용 기반 수수료가 있는 경우, 그리고 주문서에 명시된 포함 사용량을 초과하여 지급해야 하는 경우를 포함하여, 이 수수료는 주문서에 명시된 이용 요율에 따라 계산되고 (해당하는 경우) 분기별로 연체로 청구 및 지급되거나, 또는 주문서에 달리 규정된 바에 따라 처리된다.",
+    "context": "대금 연체 시 적용 이율 — TOS 월 1.5% vs 하도급법 공정위 고시 이율"
   },
   "TOS-8.2": {
-    doc: "TOS",
-    section: "8.2",
-    title: "해지 (30일 치유 기간)",
-    text: "8.2 Termination for Cause. Without limiting either Party’s other rights, either Party may terminate this Agreement for cause (a) in the event of any material breach by the other Party of any provision of this Agreement and failure to remedy the breach (and provide reasonable written notice of such remedy to the non-breaching Party) within thirty (30) days following written notice of such breach from the non-breaching Party or (b) if the other Party seeks protection under any bankruptcy, receivership, or similar proceeding or such proceeding is instituted against that Party and not dismissed wi",
-    translation: "material breach 후 30일 이내 치유 실패 시 해지 가능. SAA §6.2의 20일과 충돌(XC-001) — 어느 기준이 우선하는지 불명확.",
-    context: "치유 기간 20일(SAA) vs 30일(TOS) 충돌 — Order Form 우선 원칙상 SAA가 우선이나 분쟁 리스크 존재"
+    "doc": "TOS",
+    "section": "8.2",
+    "title": "해지 (30일 치유 기간)",
+    "text": "8.2 Termination for Cause. Without limiting either Party’s other rights, either Party may terminate this Agreement for cause (a) in the event of any material breach by the other Party of any provision of this Agreement and failure to remedy the breach (and provide reasonable written notice of such remedy to the non-breaching Party) within thirty (30) days following written notice of such breach from the non-breaching Party or (b) if the other Party seeks protection under any bankruptcy, receivership, or similar proceeding or such proceeding is instituted against that Party and not dismissed wi",
+    "translation": "[조항 ID] 8.2\n[조항 제목] 해지 (30일 치유 기간)\n[원문] 사유에 의한 해지. 양 당사자의 다른 권리를 제한하지 않는 한, 어느 당사자든지 본 계약을 사유로 해지할 수 있다( (a) 상대 당사자가 본 계약의 어떠한 조항이라도 중대한 위반을 하고 그 위반을 시정하지 못하며(그리고 그러한 시정에 대한 합리적인 서면 통지서를 비위반 당사자에게 제공하는 것을 포함) 그러한 위반에 대하여 비위반 당사자가 서면으로 통지한 날로부터 삼십(30)일 이내에 시정하지 않는 경우, 또는 (b) 상대 당사자가 파산, 관리개시, 또는 유사한 절차의 보호를 구하거나 그러한 절차가 제기되고 기각되지 않는 경우)",
+    "context": "치유 기간 20일(SAA) vs 30일(TOS) 충돌 — Order Form 우선 원칙상 SAA가 우선이나 분쟁 리스크 존재"
   },
   "TOS-8.4": {
-    doc: "TOS",
-    section: "8.4",
-    title: "서비스 즉시 정지권",
-    text: "8.4 Suspension of Service. If Palantir reasonably determines or suspects that: (a) Customer’s use of the Service violates applicable law (including but not limited to the Trade Compliance Requirements) or otherwise violates a material term of this Agreement (including but not limited to Section 3.2 (Data Protection), Section 4 (Acceptable Use), Section 5.3 (Restrictions), Section 6 (Confidentiality), Section 7 (Fees and Payment), and Section 11 (Customer Warranty)), or (b) Customer’s use of the Service poses a risk of material harm to Palantir or its other customers, Palantir reserves the right to disable or suspend Customer’s access to all or any part of the Palantir Technology, subject to Palantir providing Customer notice of such suspension concurrent or prior to such suspension.",
-    translation: "Palantir은 법 위반, material term 위반, 보안 리스크 발생 시 사전 통보 없이 즉시 서비스 정지 가능. SAA 20일 치유 기간을 우회할 수 있어 XC-004 충돌.",
-    context: "가장 위험한 조항 — Palantir이 일방적으로 즉시 정지할 수 있는 근거. KT 귀책 여부 사전 확인 필수"
+    "doc": "TOS",
+    "section": "8.4",
+    "title": "서비스 즉시 정지권",
+    "text": "8.4 Suspension of Service. If Palantir reasonably determines or suspects that: (a) Customer’s use of the Service violates applicable law (including but not limited to the Trade Compliance Requirements) or otherwise violates a material term of this Agreement (including but not limited to Section 3.2 (Data Protection), Section 4 (Acceptable Use), Section 5.3 (Restrictions), Section 6 (Confidentiality), Section 7 (Fees and Payment), and Section 11 (Customer Warranty)), or (b) Customer’s use of the Service poses a risk of material harm to Palantir or its other customers, Palantir reserves the right to disable or suspend Customer’s access to all or any part of the Palantir Technology, subject to Palantir providing Customer notice of such suspension concurrent or prior to such suspension.",
+    "translation": "8.4 서비스 즉시 정지. 팔란티어가 합리적으로 판단하거나 의심하는 경우: (a) 고객의 서비스 이용이 적용 가능한 법률에 위반하거나(무역 준수 요건을 포함하되 이에 한정되지 않는 경우를 포함) 본 계약의 중요한 조항을 위반하거나(여기에 포함되며 예를 들면 제3.2조(데이터 보호), 제4조(허용 가능한 이용), 제5.3조(제한), 제6조(기밀 유지), 제7조(수수료 및 지급), 제11조(고객 보증) 등을 포함하되 이에 한정되지 않음) 또는 (b) 고객의 서비스 이용이 팔란티어 또는 그 외 고객들에게 중대한 피해를 입힐 위험을 초래하는 경우, 팔란티어는 고객의 팔란티어 테크놀로지에 대한 접근의 전부 또는 일부를 비활성화하거나 중지시킬 권리를 보유하며, 이러한 정지에 대해 팔란티어가 고객에게 그 정지의 통지를 동시 또는 사전에 제공하는 것을 조건으로 한다.",
+    "context": "가장 위험한 조항 — Palantir이 일방적으로 즉시 정지할 수 있는 근거. KT 귀책 여부 사전 확인 필수"
   },
   "TOS-9.1": {
-    doc: "TOS",
-    section: "9.1",
-    title: "IP 침해 면책 (Palantir)",
-    text: "9.1 Palantir Indemnification. Palantir shall defend Customer against any claim of infringement or violation of any Intellectual Property Rights asserted against Customer by a third party based upon Customer’s use of Palantir Technology in accordance with the terms of this Agreement and indemnify and hold harmless Customer from and against reasonable costs, attorneys’ fees, and damages, if any, finally awarded against Customer pursuant to a non-appealable order by a tribunal of competent jurisdiction in such claim or settlement entered into by Palantir. If Customer’s use of any of the Palantir ",
-    translation: "Palantir Technology 관련 IP 침해 클레임은 Palantir이 방어 및 면책. 단 고객이 무단 수정하거나 TOS 위반 시 면책 제외.",
-    context: "KT가 Palantir 기술 사용 중 제3자 IP 침해 클레임 받을 경우 Palantir에 방어 요청 가능"
+    "doc": "TOS",
+    "section": "9.1",
+    "title": "IP 침해 면책 (Palantir)",
+    "text": "9.1 Palantir Indemnification. Palantir shall defend Customer against any claim of infringement or violation of any Intellectual Property Rights asserted against Customer by a third party based upon Customer’s use of Palantir Technology in accordance with the terms of this Agreement and indemnify and hold harmless Customer from and against reasonable costs, attorneys’ fees, and damages, if any, finally awarded against Customer pursuant to a non-appealable order by a tribunal of competent jurisdiction in such claim or settlement entered into by Palantir. If Customer’s use of any of the Palantir ",
+    "translation": "[조항 ID] 9.1\n[조항 제목] IP 침해 면책 (Palantir)\n[원문]\n9.1 Palantir Indemnification. Palantir shall defend Customer against any claim of infringement or violation of any Intellectual Property Rights asserted against Customer by a third party based upon Customer’s use of Palantir Technology in accordance with the terms of this Agreement and indemnify and hold harmless Customer from and against reasonable costs, attorneys’ fees, and damages, if any, finally awarded against Customer pursuant to a non-appealable order by a tribunal of competent jurisdiction in such claim or settlement entered into by Palantir. If Customer’s use of any of the Palantir\n[번역문]\n9.1 Palantir 면책. Palantir는 본 계약의 조건에 따라 고객의 Palantir Technology 사용에 기초하여 제3자가 고객에 대해 제기한 지적 재산권 침해 또는 위반 주장으로부터 고객을 방어하고, 해당 주장에 따라 관할 구역의 재판소가 내린 항소 불가 명령에 의해 최종적으로 고객에게 배상될 합리적 비용, 변호사 수수료 및 손해배상(있을 경우)을 고객으로부터 면책하고 고객을 면책한다. Palantir가 체결한 합의로 인해 발생하는 경우를 포함하여. 만약 고객의 Palantir 기술 사용이",
+    "context": "KT가 Palantir 기술 사용 중 제3자 IP 침해 클레임 받을 경우 Palantir에 방어 요청 가능"
   },
   "TOS-12": {
-    doc: "TOS",
-    section: "12",
-    title: "Liability Cap (TOS)",
-    text: "12. Limitations of Liability. TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, AND NOTWITHSTANDING ANY OTHER PROVISION OF THIS AGREEMENT, NEITHER PARTY SHALL BE LIABLE TO THE OTHER PARTY OR ITS AFFILIATES FOR ANY (A) COST OF PROCUREMENT OF ANY SUBSTITUTE PRODUCTS OR SERVICES (EXCEPT FOR PALANTIR’S OBLIGATIONS PURSUANT TO SECTION 9.1(a) HEREIN), OR COST OF REPLACEMENT OF ANY CUSTOMER DATA, (B) ECONOMIC LOSSES, EXPECTED OR LOST PROFITS, REVENUE, OR ANTICIPATED SAVINGS, LOSS OF BUSINESS, LOSS OF CONTRACTS, LOSS OF OR DAMAGE TO GOODWILL OR REPUTATION, AND/OR (C) INDIRECT, SPECIAL, INCIDENTAL, PU",
-    translation: "최대 책임: max(직전 12개월 Order Form Fee, USD $100K). 간접손해 전면 배제. SAA §8.2의 $10M Cap과 충돌(XC-002).",
-    context: "TOS Cap $100K — SAA Cap $10M과 충돌. Order Form 우선 원칙상 SAA 적용이나 Palantir이 TOS 주장 가능"
+    "doc": "TOS",
+    "section": "12",
+    "title": "Liability Cap (TOS)",
+    "text": "12. Limitations of Liability. TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, AND NOTWITHSTANDING ANY OTHER PROVISION OF THIS AGREEMENT, NEITHER PARTY SHALL BE LIABLE TO THE OTHER PARTY OR ITS AFFILIATES FOR ANY (A) COST OF PROCUREMENT OF ANY SUBSTITUTE PRODUCTS OR SERVICES (EXCEPT FOR PALANTIR’S OBLIGATIONS PURSUANT TO SECTION 9.1(a) HEREIN), OR COST OF REPLACEMENT OF ANY CUSTOMER DATA, (B) ECONOMIC LOSSES, EXPECTED OR LOST PROFITS, REVENUE, OR ANTICIPATED SAVINGS, LOSS OF BUSINESS, LOSS OF CONTRACTS, LOSS OF OR DAMAGE TO GOODWILL OR REPUTATION, AND/OR (C) INDIRECT, SPECIAL, INCIDENTAL, PU",
+    "translation": "12. 책임의 한계. 적용 가능한 법률이 허용하는 최대 범위 내에서, 그리고 본 계약의 다른 어떤 조항에도 불구하고, 어느 당사자도 상대 당사자 또는 그 계열사에 대하여 (A) 대체 제품 또는 서비스의 조달 비용(단, 본 계약의 제9.1(a) 조에 따른 Palantir의 의무는 예외), 또는 고객 데이터의 교체 비용, (B) 경제적 손실, 기대되거나 손실된 이익, 매출, 또는 예상되는 절감, 사업 손실, 계약 손실, 영업권 또는 평판의 상실 또는 손상, 및/또는 (C) 간접적, 특별한, 우발적, 징벌적, 또는 결과적 손해에 대해 어떠한 책임도 지지 않는다.",
+    "context": "TOS Cap $100K — SAA Cap $10M과 충돌. Order Form 우선 원칙상 SAA 적용이나 Palantir이 TOS 주장 가능"
   },
   "TOS-13": {
-    doc: "TOS",
-    section: "13",
-    title: "준거법 및 중재 (TOS)",
-    text: "13. Dispute Resolution. Any dispute, controversy, or claim arising from or relating to this Agreement, including arbitrability, that cannot be resolved following good faith discussions within sixty (60) days after notice of a dispute shall be finally settled by arbitration. If Customer is located in the Americas, then the governing law shall be the substantive laws of the State of New York, without regard to conflicts of law provisions thereof, and arbitration shall be administered in New York, New York, United States under the Comprehensive Arbitration Rules and Procedures of the Judicial Arb",
-    translation: "분쟁은 60일 협의 후 중재. 미국 이외 고객 → 영국법, 런던 ICC 중재. SAA §9.0 한국법/서울 중재와 충돌(XC-003).",
-    context: "TOS는 영국법/런던 중재 → SAA 한국법/서울 중재와 정면 충돌. 준거법 확정이 모든 분석의 선결 조건"
+    "doc": "TOS",
+    "section": "13",
+    "title": "준거법 및 중재 (TOS)",
+    "text": "13. Dispute Resolution. Any dispute, controversy, or claim arising from or relating to this Agreement, including arbitrability, that cannot be resolved following good faith discussions within sixty (60) days after notice of a dispute shall be finally settled by arbitration. If Customer is located in the Americas, then the governing law shall be the substantive laws of the State of New York, without regard to conflicts of law provisions thereof, and arbitration shall be administered in New York, New York, United States under the Comprehensive Arbitration Rules and Procedures of the Judicial Arb",
+    "translation": "[조항 ID] 13\n[조항 제목] 준거법 및 중재 (TOS)\n[원문]\n13. 분쟁 해결. 본 계약으로부터 발생하거나 본 계약과 관련된 모든 분쟁, 논쟁 또는 청구를 포함하여, 중재 가능성을 포함한, 분쟁에 대한 통지 후 (60)일 이내에 선의의 논의를 통해 해결되지 않는 경우에는 최종적으로 중재에 의해 해결된다. 고객이 미주 지역에 위치한 경우, 준거법은 뉴욕 주의 실질법으로 하되, 그에 관한 충돌법 규정은 고려하지 아니하며, 중재는 미국 뉴욕주 뉴욕시에서 Comprehensive Arbitration Rules and Procedures of the Judicial Arb에 따라 관리된다.",
+    "context": "TOS는 영국법/런던 중재 → SAA 한국법/서울 중재와 정면 충돌. 준거법 확정이 모든 분석의 선결 조건"
   },
   "OF3-FEES": {
-  doc: "OF3",
-  section: "Fees / Billing Details",
-  title: "Enablement Program $9M 및 지급 조건",
-  text: "Palantir Enablement Program for the Order Term. TOTAL: USD $9,000,000 (discounted from $12,000,000 under Order Form #2 partnership objectives). ORDER TERM: Effective Date to July 21, 2026. BILLING: Palantir shall invoice Customer on the date of signature of this Order Form #3. All payments via wire transfer within thirty (30) days after invoice issuance. Signed: KT - Woochul Byun (SVP), Palantir - Ryan Taylor, June 3 2025.",
-  translation: "Enablement Program 총액 USD 9백만 달러(정가 $12M에서 $3M 할인). 서명일(2025.6.3) 인보이스 발행, 30일 내 전신 송금. 이행 기간: 발효일~2026년 7월 21일.",
-  kt_risk: "서명과 동시에 인보이스 발행. 30일 내 미지급 시 TOS §7 연체이자(월 1.5%) 적용. 이행 기간 종료(2026.7.21) 후 미완료 시 분쟁 가능."
- },
+    "doc": "OF3",
+    "section": "Fees / Billing Details",
+    "title": "Enablement Program $9M 및 지급 조건",
+    "text": "Palantir Enablement Program for the Order Term. TOTAL: USD $9,000,000 (discounted from $12,000,000 under Order Form #2 partnership objectives). ORDER TERM: Effective Date to July 21, 2026. BILLING: Palantir shall invoice Customer on the date of signature of this Order Form #3. All payments via wire transfer within thirty (30) days after invoice issuance. Signed: KT - Woochul Byun (SVP), Palantir - Ryan Taylor, June 3 2025.",
+    "translation": "[조항 ID] Fees / Billing Details\n[조항 제목] Enablement Program $9M 및 지급 조건\n[원문]\n팔란티르 Enablement Program은 주문 기간에 적용됩니다. 총액: 미화 9,000,000 달러(주문서 #2의 파트너십 목표에 따라 12,000,000 달러에서 할인). 주문 기간: 발효일로부터 2026년 7월 21일까지. 청구: 이 주문서 #3의 서명일에 고객에게 송장을 발행합니다. 모든 대금은 송장 발행일로부터 30일 이내에 전신 송금으로 지급됩니다. 서명: KT - Woochul Byun (SVP), Palantir - Ryan Taylor, 2025년 6월 3일.",
+    "kt_risk": "서명과 동시에 인보이스 발행. 30일 내 미지급 시 TOS §7 연체이자(월 1.5%) 적용. 이행 기간 종료(2026.7.21) 후 미완료 시 분쟁 가능."
+  },
   "OF3-T2": {
-  doc: "OF3",
-  section: "Terms §2",
-  title: "Non-Solicitation 4년 (Palantir Certified)",
-  text: "Palantir agrees not to solicit any Partner employees who have completed the three (3) phases of the Enablement Program in accordance with Appendix A for four (4) years from the Effective Date. For the avoidance of doubt, where Partner employees have completed the three (3) phases of the Enablement Program, such employees will be considered Palantir Certified.",
-  translation: "Palantir은 Enablement Program 3단계 전부 수료한 KT 직원(Palantir Certified)을 발효일로부터 4년간 채용 권유 불가.",
-  kt_risk: "보호 대상은 3단계 전부 수료자만. Phase 1·2만 완료한 직원은 미보호. 이직 권유 vs 자발적 지원 구분 필요. 위반 시 손해배상 청구 가능."
- },
- "OF3-PROG": {
-  doc: "OF3",
-  section: "Exhibit B",
-  title: "Enablement Program 구조 (3단계)",
-  text: "Phase 1 - Fundamental Training (2 months): classroom sessions, hands-on exercises, simulation projects. Phase 2 - Hands-On Experience (7 months): KT engineers embedded alongside Palantir teams for internal use cases and customer-facing engagements, progressive responsibility under Palantir guidance. Phase 3 - Autonomous Practice (3 months): KT teams operate independently, autonomous bootcamp delivery, pilot execution with Palantir in support role. Total 3 Palantir teams, 6 individuals (deployment strategists + FDEs). Two target groups: Internal teams (operations/governance) and Reseller teams (sales reps, implementation strategists, solution engineers).",
-  translation: "총 12개월 3단계 프로그램. 1단계(2개월) 기초교육, 2단계(7개월) 실전 임베딩, 3단계(3개월) 자율 운영. Palantir 6인 파견. 내부팀(운영·거버넌스) 및 영업팀(영업·구현) 대상.",
-  kt_risk: "3단계 완료 기준이 Non-Solicitation 보호의 전제조건. 프로그램 미완료 시 KT 인력 보호 불가. 이행 기간 2026.7.21 종료 후 미완료 분쟁 가능성."
- },
+    "doc": "OF3",
+    "section": "Terms §2",
+    "title": "Non-Solicitation 4년 (Palantir Certified)",
+    "text": "Palantir agrees not to solicit any Partner employees who have completed the three (3) phases of the Enablement Program in accordance with Appendix A for four (4) years from the Effective Date. For the avoidance of doubt, where Partner employees have completed the three (3) phases of the Enablement Program, such employees will be considered Palantir Certified.",
+    "translation": "Palantir는 부록 A에 따라 Enablement Program의 세(3) 단계를 이수한 어떠한 파트너 직원도 발효일로부터 4년 동안 모집하지 않기로 합의한다. 의심의 여지를 없애기 위하여, 파트너 직원이 Enablement Program의 세(3) 단계를 이수한 경우, 그러한 직원은 Palantir 인증으로 간주된다.",
+    "kt_risk": "보호 대상은 3단계 전부 수료자만. Phase 1·2만 완료한 직원은 미보호. 이직 권유 vs 자발적 지원 구분 필요. 위반 시 손해배상 청구 가능."
+  },
+  "OF3-PROG": {
+    "doc": "OF3",
+    "section": "Exhibit B",
+    "title": "Enablement Program 구조 (3단계)",
+    "text": "Phase 1 - Fundamental Training (2 months): classroom sessions, hands-on exercises, simulation projects. Phase 2 - Hands-On Experience (7 months): KT engineers embedded alongside Palantir teams for internal use cases and customer-facing engagements, progressive responsibility under Palantir guidance. Phase 3 - Autonomous Practice (3 months): KT teams operate independently, autonomous bootcamp delivery, pilot execution with Palantir in support role. Total 3 Palantir teams, 6 individuals (deployment strategists + FDEs). Two target groups: Internal teams (operations/governance) and Reseller teams (sales reps, implementation strategists, solution engineers).",
+    "translation": "Phase 1 - 기본 교육 (2개월): 교실 수업, 실습 활동, 시뮬레이션 프로젝트.\nPhase 2 - Hands-On Experience (7개월): KT 엔지니어가 팔란티어 팀과 함께 내부 활용 사례 및 고객 대면 참여에 배치되며, 팔란티어의 지침 하에 점진적 책임을 수행한다.\nPhase 3 - Autonomous Practice (3개월): KT 팀이 독립적으로 운영되며, 자율 부트캠프를 제공하고 팔란티어의 지원 역할로 파일럿을 실행한다.\n총 3개의 팔란티어 팀, 6명(배포 전략가들 + FDE들).\n두 대상 그룹: 내부 팀(운영/거버넌스) 및 리셀러 팀(영업 담당자, 구현 전략가, 솔루션 엔지니어).",
+    "kt_risk": "3단계 완료 기준이 Non-Solicitation 보호의 전제조건. 프로그램 미완료 시 KT 인력 보호 불가. 이행 기간 2026.7.21 종료 후 미완료 분쟁 가능성."
+  },
   "OF4-FEES": {
-    doc: "OF4",
-    section: "Fees",
-    title: "Platform License 지급 (OF4)",
-    text: "Total USD $27,000,000 (discounted from $40M). Payment schedule: Execution $4M, Mar 2026 $5M, Mar 2027 $6M, Mar 2028 $6M, Mar 2029 $6M. For the avoidance of doubt, Customer shall have NO RIGHT TO TERMINATE this Order Form #4 for convenience. Upon SAA termination, remainder Fees are ratable based on total $27M.",
-    translation: "총 $27M. 즉시 $4M + 연간 $5~6M. 편의해지 불가. SAA 해지 시 잔여 Fee는 ratable 기준 처리.",
-    context: "편의해지 절대 불가 — 해지 논거 전개 전 반드시 확인. SAA 해지 시 잔여 Fee 자동 발생"
+    "doc": "OF4",
+    "section": "Fees",
+    "title": "Platform License 지급 (OF4)",
+    "text": "Total USD $27,000,000 (discounted from $40M). Payment schedule: Execution $4M, Mar 2026 $5M, Mar 2027 $6M, Mar 2028 $6M, Mar 2029 $6M. For the avoidance of doubt, Customer shall have NO RIGHT TO TERMINATE this Order Form #4 for convenience. Upon SAA termination, remainder Fees are ratable based on total $27M.",
+    "translation": "[조항 ID] Fees\n[조항 제목] Platform License 지급 (OF4)\n[원문]\n총 USD $27,000,000(4천만 달러에서 할인됨). 지급 일정: 체결 시 $4M, 2026년 3월 $5M, 2027년 3월 $6M, 2028년 3월 $6M, 2029년 3월 $6M. 오해의 소지를 방지하기 위하여, 고객은 본 주문서 #4를 편의상 해지할 권리가 없다. SAA 종료 시 잔여 수수료는 총 $27M를 기준으로 비례하여 산정된다.",
+    "context": "편의해지 절대 불가 — 해지 논거 전개 전 반드시 확인. SAA 해지 시 잔여 Fee 자동 발생"
   },
   "OF4-CLOUD": {
-    doc: "OF4",
-    section: "Cloud",
-    title: "Azure Cloud 사용 및 초과요금",
-    text: "PoC Azure environment: Included Usage per year — Y1 $5M, Y2 $5M, Y3 $5M, Y4 $5M, Y5 $7M. Overage rates: Foundry Compute $0.00093/compute-second, Ontology $4.310/GB-month, Storage $0.028/GB-month. Upon migration to Palantir SPC Azure, usage rates and included usage no longer apply — parties will mutually agree cloud fees.",
-    translation: "연간 포함 사용량 내 초과 시 Compute/Ontology/Storage 별도 과금. SPC 마이그레이션 후 요율 재협의.",
-    context: "Azure 초과 사용 시 추가 비용 발생 — 사용량 모니터링 필수. SPC 이전 전까지만 적용"
+    "doc": "OF4",
+    "section": "Cloud",
+    "title": "Azure Cloud 사용 및 초과요금",
+    "text": "PoC Azure environment: Included Usage per year — Y1 $5M, Y2 $5M, Y3 $5M, Y4 $5M, Y5 $7M. Overage rates: Foundry Compute $0.00093/compute-second, Ontology $4.310/GB-month, Storage $0.028/GB-month. Upon migration to Palantir SPC Azure, usage rates and included usage no longer apply — parties will mutually agree cloud fees.",
+    "translation": "[조항 ID] Cloud\n[조항 제목] Azure Cloud 사용 및 초과요금\n[원문]\nPoC Azure 환경: 연간 포함 사용량 — Y1 $5M, Y2 $5M, Y3 $5M, Y4 $5M, Y5 $7M. 초과 요금: Foundry Compute $0.00093/compute-second, Ontology $4.310/GB-month, Storage $0.028/GB-month. Palantir SPC Azure로의 마이그레이션 시, 사용 요금 및 포함 사용량은 더 이상 적용되지 않으며 — 당사자 간에 클라우드 요금을 상호 합의합니다.",
+    "context": "Azure 초과 사용 시 추가 비용 발생 — 사용량 모니터링 필수. SPC 이전 전까지만 적용"
   },
- "REG-하도급-8조": {
-  doc: "하도급지침",
-  section: "제8조 (계약체결 시 준수사항)",
-  title: "하도급 계약 준수사항",
-  text: "계약체결에 있어 하도급대금과 그 지급방법 등 하도급계약의 내용을 계약서에 포함하며, 단가결정 지연 시 임시단가 적용 후 소급 정산한다. 단가 조정 요청 시 30일 이내 협의 의무.",
-  translation: "계약 체결 시 하도급대금·지급방법을 계약서에 명기. 단가 조정 요청 시 30일 이내 협의.",
-  kt_risk: "TOS §7 월 1.5% 이자율과 하도급법 기준 이율 충돌 시 내규 우선 적용 가능성."
- },
- "REG-하도급-8조⑦": {
-  doc: "하도급지침",
-  section: "제8조⑦ / 제10조④",
-  title: "계약 해지 최고 기간 (1개월)",
-  text: "최고가 필요한 경우 계약상대방에게 1개월 이상의 기간을 정하여 그 이행을 최고하고, 그 기간 내에 이행하지 아니한 때에 해제·해지할 수 있다. 계약 해제·해지 이유에 해당하지 않는 거래정지는 가급적 2~3개월 이전에 서면으로 통보한다.",
-  translation: "하도급법 적용 계약 해지 시 1개월 이상 최고 후 해지 가능. 일방적 거래정지는 2~3개월 전 서면 통보 권장.",
-  kt_risk: "SAA §6.2(20일), TOS §8.2(30일)보다 긴 1개월 최고 기간. 하도급법 적용 거래에서 우선 적용 가능(EC-002)."
- },
- "REG-정보보호-43조": {
-  doc: "정보보호지침",
-  section: "제43조 (보안성 승인)",
-  title: "신규 정보시스템 CISO 보안성 승인",
-  text: "신규 서비스 및 사업을 주관하거나 정보시스템의 구축 또는 변경을 하고자 하는 부서의 장은 반드시 CISO에게 보안성 승인을 요청하고, 검토 결과에 대한 보호조치를 취하여야 한다. CISO는 이행 미흡 시 서비스 중단을 요구할 수 있다.",
-  translation: "신규 정보시스템 구축·변경 전 CISO 보안성 승인 필수. 미이행 시 CISO가 서비스 중단 요구 가능.",
-  kt_risk: "Azure 클라우드 도입(OF4-CLOUD) 전 CISO 승인 없이 진행 시 내규 위반(EC-003). 분쟁 시 내부 감사 리스크 병존."
- },
- "REG-정보보호-44조": {
-  doc: "정보보호지침",
-  section: "제44조 (정보자산의 분류 및 통제)",
-  title: "가급 자산 외부 제공 사전승인",
-  text: "'가'급으로 분류된 정보자산(개인정보·회사재산권·신뢰성에 커다란 손상·전사 업무수행 영향·복구에 많은 예산 요구)은 부문정보보안관리자의 사전승인 없이는 외부로 유출 또는 공개할 수 없다.",
-  translation: "가급 정보자산은 부문정보보안관리자 사전승인 없이 외부 유출·공개 불가.",
-  kt_risk: "고객 데이터를 Azure(OF4-CLOUD)에서 처리 시 사전승인 의무(EC-004). 미이행 시 내부 징계 및 법적 책임."
- },
- "REG-계약-36조": {
-  doc: "계약규정",
-  section: "제36조 (계약서의 작성)",
-  title: "계약서 필수 기재사항",
-  text: "계약서에는 계약목적, 계약금액, 이행기간, 계약보증금, 위험부담, 지체상금, 기타 필요사항을 명기하여야 한다.",
-  translation: "계약목적·금액·이행기간·지체상금 등 필수 기재.",
-  kt_risk: "Palantir과의 계약에 KT 계약규정 필수 기재사항 누락 시 내부 감사에서 지적 가능."
- },
- "REG-계약-18조": {
-  doc: "계약규정",
-  section: "제18조 (수의계약 집행기준)",
-  title: "수의계약 집행기준",
-  text: "수의계약이 가능한 경우: 특허품·실용신안등록품 제조·구매, 특정인의 기술이 필요하거나 해당 물품 생산자가 1인뿐인 경우, 기타 경쟁입찰이 불가능하거나 현저히 부적절한 경우.",
-  translation: "특허품·단독 공급자·경쟁 불가 사유 시 수의계약 허용.",
-  kt_risk: "Palantir과의 수의계약 요건 충족 여부 확인 필요. 요건 미충족 시 계약 절차 위반으로 감사 지적 가능."
- },
- "REG-회계-30조": {
-  doc: "회계규정",
-  section: "제30조~제32조 (지출 원칙)",
-  title: "예산 범위 내 지출 원칙",
-  text: "제32조: 지출은 성립된 예산의 범위 내에서 하여야 한다. 다만, 사업의 특수성 및 긴급한 사정 등으로 본조의 규정에 의하지 못할 경우에는 재무실 예산주무부서의 장과 사전 협의한 후 집행할 수 있다.",
-  translation: "모든 지출은 성립된 예산 범위 내에서만 가능. 예산 초과 시 재무실 사전 협의 필수.",
-  kt_risk: "OF4 서명 즉시 $4M 지급 의무가 예산 편성 없이 발생한 경우 회계규정 위반(EC-005). 재무실 사전 협의 여부 확인 필요."
- },
-
- "LAW-하도급-13조": {
-  doc: "하도급법",
-  section: "하도급거래 공정화에 관한 법률 제13조",
-  title: "하도급대금 지급 의무",
-  text: "원사업자는 수급사업자에게 제조 등의 위탁을 한 경우 목적물 등의 수령일(건설위탁의 경우에는 인수일)부터 60일 이내의 기간으로 정한 지급기일까지 하도급대금을 지급하여야 한다. 원사업자가 발주자로부터 준공금을 받은 경우 그 날부터 15일 이내에 하도급대금을 지급하여야 한다. 원사업자가 정당한 사유 없이 지급기일 내에 하도급대금을 지급하지 아니한 경우 지연일수에 공정거래위원회가 고시하는 이율(현행 연 15.5%)을 곱한 금액을 지급하여야 한다.",
-  translation: "수령일로부터 60일 이내 하도급대금 지급. 준공금 수령 후 15일 이내 지급. 연체 시 공정위 고시 이율(연 15.5%) 적용.",
-  kt_risk: "TOS §7 월 1.5%(연 18%)보다 하도급법 고시 이율(연 15.5%)이 낮음. 하도급법 적용 거래 시 KT에 유리한 이율. 하도급법 적용 여부가 핵심 선결 쟁점(EC-001)."
- },
- "LAW-하도급-16조": {
-  doc: "하도급법",
-  section: "하도급거래 공정화에 관한 법률 제16조",
-  title: "부당한 계약해지 금지",
-  text: "원사업자는 수급사업자에게 책임을 돌릴 사유가 없는 데도 불구하고 계약을 해제·해지하여서는 아니 된다. 원사업자가 계약을 해제·해지할 경우 수급사업자에게 해제·해지 사유, 손해배상 내용 등을 서면으로 알려야 한다. 수급사업자에게 책임이 있는 경우에도 1개월 이상의 기간을 정하여 서면으로 최고하고 그 기간 내에 이행하지 아니한 때에 해제·해지할 수 있다.",
-  translation: "하도급법 적용 시 계약 해지는 1개월 서면 최고 후 가능. 귀책 없는 해지 금지.",
-  kt_risk: "Palantir이 SAA §6.2의 20일 기준으로 해지 통보 시, KT가 하도급법 제16조 1개월 최고 기간을 주장할 수 있음(EC-002). 하도급법 적용 여부가 방어 전략의 핵심."
- },
- "LAW-민법-544조": {
-  doc: "민법",
-  section: "민법 제544조 (이행지체와 해제)",
-  title: "계약 해지 및 최고 절차",
-  text: "당사자 일방이 그 채무를 이행하지 아니하는 때에는 상대방은 상당한 기간을 정하여 그 이행을 최고하고 그 기간 내에 이행하지 아니한 때에는 계약을 해제할 수 있다. 그러나 채무자가 미리 이행하지 아니할 의사를 표시한 경우에는 최고를 요하지 아니한다.",
-  translation: "채무불이행 시 상당 기간 최고 후 계약 해제 가능. 이행 거절 명시 시 최고 불필요.",
-  kt_risk: "SAA §6.2 20일 치유 기간과 민법 상당 기간 개념 중첩. 한국법 준거 시(SAA §9.0) 민법 적용. 치유 기간 충족 없이 해지 주장 시 위법 가능성."
- },
-
- "REG-협력사-4조": {
-  doc: "협력사선정지침",
-  section: "제4조 (협력사 선정기준)",
-  title: "협력사 등록 요건",
-  text: "협력사 선정기준: 신용평가등급 B- 이상, 품질인증(TL9000 또는 ISO9001), 재무건전성 요건 충족, 기술·인력·설비 요건 충족. 협력사 등록취소 기준: 부도·파산, 계약 중대 위반 등.",
-  translation: "신용등급 B- 이상 및 품질인증 보유 업체만 협력사 등록 가능.",
-  kt_risk: "Palantir Korea LLC의 협력사 등록 요건 충족 여부 확인 필요. 미등록 상태에서 계약 집행 시 내부 절차 위반."
- },
- "LAW-하도급-25조의3": {
-  doc: "하도급법",
-  section: "하도급거래 공정화에 관한 법률 제25조의3",
-  title: "하도급법 적용 범위 및 원사업자 정의",
-  text: "이 법은 원사업자가 수급사업자에게 제조·수리·건설·용역의 위탁을 하는 경우에 적용한다. 원사업자란 중소기업자가 아닌 사업자, 또는 중소기업자 중 직전 사업연도의 연간매출액이 수급사업자의 연간매출액보다 많은 사업자를 말한다. 소프트웨어 라이선스 공급 거래가 제조·용역 위탁에 해당하는지는 거래의 실질에 따라 판단.",
-  translation: "하도급법은 원사업자→수급사업자 위탁 거래에 적용. KT-Palantir 거래에서 어느 쪽이 원사업자인지에 따라 적용 여부 결정.",
-  kt_risk: "KT가 Palantir에 대금 지급 시 KT가 원사업자이면 하도급법 적용 가능. 반대의 경우 적용 불가. 소프트웨어 라이선스가 용역 위탁에 해당하는지 법무 검토 필요."
- },
- "LAW-공정거래-45조": {
-  doc: "공정거래법",
-  section: "독점규제 및 공정거래에 관한 법률 제45조",
-  title: "불공정거래행위 금지",
-  text: "사업자는 불공정한 거래방법으로 경쟁을 저해하거나 상대방의 불이익을 초래하는 행위를 하여서는 아니 된다. 거래상 지위의 남용, 부당한 계약조건 강요, 불이익 제공이 포함된다. 소프트웨어 독점 공급 계약에서 일방적 서비스 정지권(TOS §8.4)이 불공정거래행위에 해당하는지 검토 가능.",
-  translation: "불공정한 거래 방법으로 경쟁 저해·상대방 불이익 초래 금지. TOS §8.4 즉시 정지권의 불공정거래행위 해당 여부 검토 가능.",
-  kt_risk: "Palantir의 TOS §8.4 일방적 즉시 정지권이 거래상 지위 남용에 해당할 수 있음. 공정위 신고 또는 불공정거래행위 주장 가능성. 다만 입증 부담은 KT에 있음."
- },
- "XC-001": {
-  doc: "충돌",
-  section: "SAA §6.2 vs TOS §8.2",
-  title: "치유 기간 충돌 (20일 vs 30일)",
-  text: "SAA §6.2: material breach 통보 후 20일 이내 치유 없으면 해지 가능.\nTOS §8.2: material breach 통보 후 30일 이내 치유 없으면 해지 가능.\n\n문서 우선순위(Order Form > SAA > TOS)상 SAA 20일이 원칙. 그러나 TOS §8.4 즉시 정지권이 치유 기간을 무력화할 수 있어 실질 치유 기간이 0일이 될 수 있음.",
-  translation: "해지 통보 후 치유 기간: SAA 20일 vs TOS 30일. 원칙상 SAA 우선이나 TOS §8.4로 우회 가능.",
-  kt_risk: "Palantir이 TOS §8.4 즉시 정지 시 KT는 치유 기회 없이 서비스 중단. SAA 20일 치유 기간 주장의 실효성 문제."
- },
- "XC-002": {
-  doc: "충돌",
-  section: "SAA §8.2 vs TOS §12",
-  title: "Liability Cap 충돌 ($10M vs $100K)",
-  text: "SAA §8.2: 최대 책임 한도 = max(직전 12개월 Partner Compensation, USD $10,000,000).\nTOS §12: 최대 책임 한도 = max(직전 12개월 지급 비용, USD $100,000).\n\nTOS Cap($100K)은 SAA Cap($10M)의 1/100 수준. SAA 우선 적용 원칙이나 Palantir이 TOS를 주장하면 KT 손해배상 수령 한도가 100배 줄어듦.",
-  translation: "손해배상 한도: SAA $10M vs TOS $100K. SAA 우선이나 Palantir의 TOS 주장 시 배상 1/100로 축소.",
-  kt_risk: "분쟁 시 Palantir이 TOS §12 적용 주장 시 KT 실질 손해배상 대폭 축소. SAA Cap 적용 명시 필요."
- },
- "XC-003": {
-  doc: "충돌",
-  section: "SAA §9.0 vs TOS §13",
-  title: "준거법·중재지 충돌 (한국법/서울 vs 영국법/런던)",
-  text: "SAA §9.0: KT(미주 외 소재)에 대해 한국법 적용, 서울 ICC 중재.\nTOS §13: 영국법 적용, 런던 ICC 중재.\n\nSAA 우선 원칙상 한국법/서울 ICC가 맞으나 Palantir이 TOS 근거로 영국법/런던 중재 주장 시 분쟁. 런던 중재 시 KT 비용·시간 부담 급증.",
-  translation: "준거법·중재지: SAA 한국법/서울 ICC vs TOS 영국법/런던 ICC. SAA 우선이나 분쟁 시 혼란 가능.",
-  kt_risk: "분쟁 시 준거법 확정 자체가 선결 쟁점. 런던 중재 주장 시 KT 비용 증가 및 한국법 보호 미적용 리스크."
- },
- "XC-004": {
-  doc: "충돌",
-  section: "TOS §8.4 vs SAA §6.2",
-  title: "서비스 즉시 정지권 (치유 기간 우회)",
-  text: "TOS §8.4: Palantir이 합리적으로 판단·의심할 경우 사전 통보와 동시에 또는 이전에 서비스 즉시 정지 가능. 트리거: 계약 위반 의심, 법령 위반, Palantir 또는 타 고객에 대한 중대한 위험.\nSAA §6.2: material breach 시 20일 서면 통보 후 치유 기간 보장.\n\n핵심 충돌: TOS §8.4는 의심만으로 즉시 정지 가능하여 SAA §6.2의 20일 치유 기간을 완전히 무력화.",
-  translation: "Palantir의 즉시 정지권(TOS §8.4)이 SAA의 20일 치유 기간(§6.2)을 우회. 가장 위험한 충돌.",
-  kt_risk: "대금 미지급·보안 이슈·계약 위반 의심 시 치유 기회 없이 서비스 즉시 중단. 합리적 의심이라는 낮은 기준 적용."
- },
- "XC-005": {
-  doc: "충돌",
-  section: "SAA §6.3 vs OF4 Billing",
-  title: "해지 후 잔여 Fee 처리 충돌",
-  text: "SAA §6.3: Hurdle 미달성 해지 시 잔여 수익 배분은 good faith 협상.\nOF4 Billing: SAA 해지 시 OF4 잔여 Fee는 ratable 기준(비례 계산)으로 처리.\n\n충돌 포인트: 협상(SAA)과 고정 ratable(OF4) 중 어느 기준이 적용되는지. OF4는 Order Form으로 SAA보다 우선 적용 원칙.",
-  translation: "해지 후 잔여 Fee: SAA는 협상, OF4는 ratable 고정. Order Form 우선 원칙상 OF4 기준 적용 가능성 높음.",
-  kt_risk: "해지 시 KT가 협상 주장해도 Palantir이 OF4 ratable 기준 주장 가능. 편의해지 불가 조항과 결합 시 KT 레버리지 급감."
- },
- "IC-001": {
-  doc: "충돌",
-  section: "SAA §1.3.2 vs SAA §2.10",
-  title: "독점 판매 금지 vs EBT 협의 권한",
-  text: "SAA §1.3.2: Palantir은 KT 동의 없이 Target Market에 직접 판매 금지.\nSAA §2.10(EBT): KT가 발굴했으나 고객이 Palantir 직접 계약을 원하는 경우, 양사 협의로 Palantir 수익을 Hurdle에 산입 가능.\n\n충돌 포인트: Palantir의 직접 접촉이 §1.3.2 위반인지 §2.10 EBT 절차의 일부인지 구분 필요. EBT는 KT의 사전 발굴·등록이 전제조건.",
-  translation: "Palantir 직접 판매 금지(§1.3.2)와 EBT 예외(§2.10)의 경계. KT 사전 등록 여부가 핵심 판단 기준.",
-  kt_risk: "Palantir이 KT 미등록 고객에 접촉 후 EBT를 주장하면 §1.3.2 위반. KT의 Opportunity Registration 선행 여부 반드시 확인."
- },
- "IC-002": {
-  doc: "충돌",
-  section: "SAA §6.3 vs SAA §2.11",
-  title: "Surviving QRC 배분 방식 충돌",
-  text: "SAA §6.3(Effect of Termination): 해지 후 Surviving QRC 수익 배분은 good faith 협상.\nSAA §2.11(Commercial Annex): 해지 후 Surviving QRC 수익 = KT 10% / Palantir 90% 고정.\n\n충돌 포인트: §6.3(협상)과 §2.11(고정) 중 어느 조항 우선인가. Commercial Annex(Schedule A)는 SAA 본문보다 우선 적용됨.",
-  translation: "해지 후 수익 배분: SAA 본문은 협상, Commercial Annex는 KT 10%/Palantir 90% 고정. Annex 우선 적용.",
-  kt_risk: "Hurdle 미달성 해지 시 KT 수익이 10%로 고정될 가능성 높음. 협상 가능성이 매우 제한됨."
- },
- "EC-001": {
-  doc: "충돌",
-  section: "TOS §7 vs 하도급지침",
-  title: "연체이자율 충돌 (월 1.5% vs 하도급법 고시 이율)",
-  text: "TOS §7: 연체 시 월 1.5%(연 18%) 또는 법적 최고 이율 중 낮은 쪽.\n하도급지침 제8조: 하도급대금 지급 지연 시 공정위 고시 이율 적용(현재 연 15.5% 수준).\n\n충돌 포인트: TOS 월 1.5%(연 18%)는 하도급법 고시 이율(연 15.5%)보다 높음. 하도급법 적용 거래라면 하도급법이 강행규정으로 우선.",
-  translation: "연체이자: TOS 월 1.5%(연 18%) vs 하도급법 고시 이율(연 15.5%). 하도급법 적용 시 법령 우선.",
-  kt_risk: "하도급법 적용 여부에 따라 이율 결정. KT가 하도급법 적용을 주장하면 TOS보다 낮은 이율 적용 가능."
- },
- "EC-002": {
-  doc: "충돌",
-  section: "하도급지침 제8조7 vs SAA §6.2 vs TOS §8.2",
-  title: "해지 최고 기간 3중 충돌",
-  text: "하도급지침 제8조7: 1개월 이상 최고 후 해지.\nSAA §6.2: 20일 서면 통보 후 해지.\nTOS §8.2: 30일 서면 통보 후 해지.\n\n하도급법 적용 거래라면 1개월 기준이 강행규정으로 우선. KT-Palantir 관계에서 하도급법 적용 여부(원사업자/수급사업자 해당 여부)가 핵심 선결 쟁점.",
-  translation: "해지 최고 기간: 하도급지침 1개월 vs SAA 20일 vs TOS 30일. 하도급법 적용 시 1개월 강행.",
-  kt_risk: "Palantir이 SAA 20일 기준 해지 통보 시 KT가 하도급법 1개월 기준 주장 가능. 하도급법 적용 여부 법무 검토 필요."
- },
- "EC-003": {
-  doc: "충돌",
-  section: "정보보호지침 제43조 vs OF4",
-  title: "CISO 보안성 승인 vs OF4 즉시 사용",
-  text: "정보보호지침 제43조: 신규 정보시스템 구축·변경 전 CISO 보안성 승인 필수.\nOF4 Cloud: 계약 즉시 PoC Azure 환경 사용 가능, 2025년 3월부터 과금 시작.\n\n충돌 포인트: OF4 서명 즉시 Azure 사용 의무 발생하나 내규상 CISO 승인이 선행되어야 함. 승인 전 사용 시 내규 위반 상태 발생.",
-  translation: "CISO 승인 전 Azure 사용 불가(내규) vs 계약 즉시 사용 개시(OF4). 내규 위반 상태에서 계약 이행 중일 가능성.",
-  kt_risk: "CISO 승인 미취득 상태에서 Azure 사용 중이면 내부 감사 지적 및 정보보호법 위반 가능. 소급 승인 취득 여부 확인 필요."
- },
- "EC-004": {
-  doc: "충돌",
-  section: "정보보호지침 제44조 vs TOS §3",
-  title: "가급 자산 외부 제공 vs TOS 데이터 처리 허용",
-  text: "정보보호지침 제44조: 가급 정보자산은 부문정보보안관리자 사전승인 없이 외부 유출·공개 불가.\nTOS §3: KT는 Palantir 플랫폼에 데이터 업로드·처리 가능. Palantir은 서비스 제공 목적으로만 사용.\n\n충돌 포인트: KT 내부 데이터(특히 가급 자산)를 Palantir 플랫폼에 업로드할 때 내규상 사전승인 절차 이행 여부.",
-  translation: "가급 자산 외부 제공 사전승인(내규) vs TOS의 데이터 업로드·처리 허용. 내규 절차 준수 여부가 핵심.",
-  kt_risk: "사전승인 없이 고객 데이터·핵심 자산을 Azure에 업로드 시 내규 위반. 데이터 침해 시 KT 책임 가중."
- },
- "EC-005": {
-  doc: "충돌",
-  section: "회계규정 제32조 vs OF4 Billing",
-  title: "예산 범위 내 지출 원칙 vs OF4 즉시 $4M 지급",
-  text: "회계규정 제32조: 지출은 성립된 예산의 범위 내에서만 가능. 예외 시 재무실 예산주무부서 장과 사전 협의 필수.\nOF4: 서명 즉시(Upon execution) USD $4,000,000 지급 의무 발생.\n\n충돌 포인트: 2025년 3월 계약 서명 시 $4M 예산이 사전 편성되어 있었는지, 재무실 사전 협의가 이루어졌는지 여부.",
-  translation: "예산 범위 내 지출 원칙(내규) vs 서명 즉시 $4M 지급 의무(OF4). 사전 예산 편성·재무실 협의 여부가 핵심.",
-  kt_risk: "예산 미편성 상태에서 $4M 집행 시 회계규정 위반. 내부 감사 지적 가능. 재무실 사전 협의 문서 확보 필요."
- },
+  "REG-하도급-8조": {
+    "doc": "하도급지침",
+    "section": "제8조 (계약체결 시 준수사항)",
+    "title": "하도급 계약 준수사항",
+    "text": "계약체결에 있어 하도급대금과 그 지급방법 등 하도급계약의 내용을 계약서에 포함하며, 단가결정 지연 시 임시단가 적용 후 소급 정산한다. 단가 조정 요청 시 30일 이내 협의 의무.",
+    "translation": "계약 체결 시 하도급대금·지급방법을 계약서에 명기. 단가 조정 요청 시 30일 이내 협의.",
+    "kt_risk": "TOS §7 월 1.5% 이자율과 하도급법 기준 이율 충돌 시 내규 우선 적용 가능성."
+  },
+  "REG-하도급-8조⑦": {
+    "doc": "하도급지침",
+    "section": "제8조⑦ / 제10조④",
+    "title": "계약 해지 최고 기간 (1개월)",
+    "text": "최고가 필요한 경우 계약상대방에게 1개월 이상의 기간을 정하여 그 이행을 최고하고, 그 기간 내에 이행하지 아니한 때에 해제·해지할 수 있다. 계약 해제·해지 이유에 해당하지 않는 거래정지는 가급적 2~3개월 이전에 서면으로 통보한다.",
+    "translation": "하도급법 적용 계약 해지 시 1개월 이상 최고 후 해지 가능. 일방적 거래정지는 2~3개월 전 서면 통보 권장.",
+    "kt_risk": "SAA §6.2(20일), TOS §8.2(30일)보다 긴 1개월 최고 기간. 하도급법 적용 거래에서 우선 적용 가능(EC-002)."
+  },
+  "REG-정보보호-43조": {
+    "doc": "정보보호지침",
+    "section": "제43조 (보안성 승인)",
+    "title": "신규 정보시스템 CISO 보안성 승인",
+    "text": "신규 서비스 및 사업을 주관하거나 정보시스템의 구축 또는 변경을 하고자 하는 부서의 장은 반드시 CISO에게 보안성 승인을 요청하고, 검토 결과에 대한 보호조치를 취하여야 한다. CISO는 이행 미흡 시 서비스 중단을 요구할 수 있다.",
+    "translation": "신규 정보시스템 구축·변경 전 CISO 보안성 승인 필수. 미이행 시 CISO가 서비스 중단 요구 가능.",
+    "kt_risk": "Azure 클라우드 도입(OF4-CLOUD) 전 CISO 승인 없이 진행 시 내규 위반(EC-003). 분쟁 시 내부 감사 리스크 병존."
+  },
+  "REG-정보보호-44조": {
+    "doc": "정보보호지침",
+    "section": "제44조 (정보자산의 분류 및 통제)",
+    "title": "가급 자산 외부 제공 사전승인",
+    "text": "'가'급으로 분류된 정보자산(개인정보·회사재산권·신뢰성에 커다란 손상·전사 업무수행 영향·복구에 많은 예산 요구)은 부문정보보안관리자의 사전승인 없이는 외부로 유출 또는 공개할 수 없다.",
+    "translation": "가급 정보자산은 부문정보보안관리자 사전승인 없이 외부 유출·공개 불가.",
+    "kt_risk": "고객 데이터를 Azure(OF4-CLOUD)에서 처리 시 사전승인 의무(EC-004). 미이행 시 내부 징계 및 법적 책임."
+  },
+  "REG-계약-36조": {
+    "doc": "계약규정",
+    "section": "제36조 (계약서의 작성)",
+    "title": "계약서 필수 기재사항",
+    "text": "계약서에는 계약목적, 계약금액, 이행기간, 계약보증금, 위험부담, 지체상금, 기타 필요사항을 명기하여야 한다.",
+    "translation": "계약목적·금액·이행기간·지체상금 등 필수 기재.",
+    "kt_risk": "Palantir과의 계약에 KT 계약규정 필수 기재사항 누락 시 내부 감사에서 지적 가능."
+  },
+  "REG-계약-18조": {
+    "doc": "계약규정",
+    "section": "제18조 (수의계약 집행기준)",
+    "title": "수의계약 집행기준",
+    "text": "수의계약이 가능한 경우: 특허품·실용신안등록품 제조·구매, 특정인의 기술이 필요하거나 해당 물품 생산자가 1인뿐인 경우, 기타 경쟁입찰이 불가능하거나 현저히 부적절한 경우.",
+    "translation": "특허품·단독 공급자·경쟁 불가 사유 시 수의계약 허용.",
+    "kt_risk": "Palantir과의 수의계약 요건 충족 여부 확인 필요. 요건 미충족 시 계약 절차 위반으로 감사 지적 가능."
+  },
+  "REG-회계-30조": {
+    "doc": "회계규정",
+    "section": "제30조~제32조 (지출 원칙)",
+    "title": "예산 범위 내 지출 원칙",
+    "text": "제32조: 지출은 성립된 예산의 범위 내에서 하여야 한다. 다만, 사업의 특수성 및 긴급한 사정 등으로 본조의 규정에 의하지 못할 경우에는 재무실 예산주무부서의 장과 사전 협의한 후 집행할 수 있다.",
+    "translation": "모든 지출은 성립된 예산 범위 내에서만 가능. 예산 초과 시 재무실 사전 협의 필수.",
+    "kt_risk": "OF4 서명 즉시 $4M 지급 의무가 예산 편성 없이 발생한 경우 회계규정 위반(EC-005). 재무실 사전 협의 여부 확인 필요."
+  },
+  "LAW-하도급-13조": {
+    "doc": "하도급법",
+    "section": "하도급거래 공정화에 관한 법률 제13조",
+    "title": "하도급대금 지급 의무",
+    "text": "원사업자는 수급사업자에게 제조 등의 위탁을 한 경우 목적물 등의 수령일(건설위탁의 경우에는 인수일)부터 60일 이내의 기간으로 정한 지급기일까지 하도급대금을 지급하여야 한다. 원사업자가 발주자로부터 준공금을 받은 경우 그 날부터 15일 이내에 하도급대금을 지급하여야 한다. 원사업자가 정당한 사유 없이 지급기일 내에 하도급대금을 지급하지 아니한 경우 지연일수에 공정거래위원회가 고시하는 이율(현행 연 15.5%)을 곱한 금액을 지급하여야 한다.",
+    "translation": "수령일로부터 60일 이내 하도급대금 지급. 준공금 수령 후 15일 이내 지급. 연체 시 공정위 고시 이율(연 15.5%) 적용.",
+    "kt_risk": "TOS §7 월 1.5%(연 18%)보다 하도급법 고시 이율(연 15.5%)이 낮음. 하도급법 적용 거래 시 KT에 유리한 이율. 하도급법 적용 여부가 핵심 선결 쟁점(EC-001)."
+  },
+  "LAW-하도급-16조": {
+    "doc": "하도급법",
+    "section": "하도급거래 공정화에 관한 법률 제16조",
+    "title": "부당한 계약해지 금지",
+    "text": "원사업자는 수급사업자에게 책임을 돌릴 사유가 없는 데도 불구하고 계약을 해제·해지하여서는 아니 된다. 원사업자가 계약을 해제·해지할 경우 수급사업자에게 해제·해지 사유, 손해배상 내용 등을 서면으로 알려야 한다. 수급사업자에게 책임이 있는 경우에도 1개월 이상의 기간을 정하여 서면으로 최고하고 그 기간 내에 이행하지 아니한 때에 해제·해지할 수 있다.",
+    "translation": "하도급법 적용 시 계약 해지는 1개월 서면 최고 후 가능. 귀책 없는 해지 금지.",
+    "kt_risk": "Palantir이 SAA §6.2의 20일 기준으로 해지 통보 시, KT가 하도급법 제16조 1개월 최고 기간을 주장할 수 있음(EC-002). 하도급법 적용 여부가 방어 전략의 핵심."
+  },
+  "LAW-민법-544조": {
+    "doc": "민법",
+    "section": "민법 제544조 (이행지체와 해제)",
+    "title": "계약 해지 및 최고 절차",
+    "text": "당사자 일방이 그 채무를 이행하지 아니하는 때에는 상대방은 상당한 기간을 정하여 그 이행을 최고하고 그 기간 내에 이행하지 아니한 때에는 계약을 해제할 수 있다. 그러나 채무자가 미리 이행하지 아니할 의사를 표시한 경우에는 최고를 요하지 아니한다.",
+    "translation": "채무불이행 시 상당 기간 최고 후 계약 해제 가능. 이행 거절 명시 시 최고 불필요.",
+    "kt_risk": "SAA §6.2 20일 치유 기간과 민법 상당 기간 개념 중첩. 한국법 준거 시(SAA §9.0) 민법 적용. 치유 기간 충족 없이 해지 주장 시 위법 가능성."
+  },
+  "REG-협력사-4조": {
+    "doc": "협력사선정지침",
+    "section": "제4조 (협력사 선정기준)",
+    "title": "협력사 등록 요건",
+    "text": "협력사 선정기준: 신용평가등급 B- 이상, 품질인증(TL9000 또는 ISO9001), 재무건전성 요건 충족, 기술·인력·설비 요건 충족. 협력사 등록취소 기준: 부도·파산, 계약 중대 위반 등.",
+    "translation": "신용등급 B- 이상 및 품질인증 보유 업체만 협력사 등록 가능.",
+    "kt_risk": "Palantir Korea LLC의 협력사 등록 요건 충족 여부 확인 필요. 미등록 상태에서 계약 집행 시 내부 절차 위반."
+  },
+  "LAW-하도급-25조의3": {
+    "doc": "하도급법",
+    "section": "하도급거래 공정화에 관한 법률 제25조의3",
+    "title": "하도급법 적용 범위 및 원사업자 정의",
+    "text": "이 법은 원사업자가 수급사업자에게 제조·수리·건설·용역의 위탁을 하는 경우에 적용한다. 원사업자란 중소기업자가 아닌 사업자, 또는 중소기업자 중 직전 사업연도의 연간매출액이 수급사업자의 연간매출액보다 많은 사업자를 말한다. 소프트웨어 라이선스 공급 거래가 제조·용역 위탁에 해당하는지는 거래의 실질에 따라 판단.",
+    "translation": "하도급법은 원사업자→수급사업자 위탁 거래에 적용. KT-Palantir 거래에서 어느 쪽이 원사업자인지에 따라 적용 여부 결정.",
+    "kt_risk": "KT가 Palantir에 대금 지급 시 KT가 원사업자이면 하도급법 적용 가능. 반대의 경우 적용 불가. 소프트웨어 라이선스가 용역 위탁에 해당하는지 법무 검토 필요."
+  },
+  "LAW-공정거래-45조": {
+    "doc": "공정거래법",
+    "section": "독점규제 및 공정거래에 관한 법률 제45조",
+    "title": "불공정거래행위 금지",
+    "text": "사업자는 불공정한 거래방법으로 경쟁을 저해하거나 상대방의 불이익을 초래하는 행위를 하여서는 아니 된다. 거래상 지위의 남용, 부당한 계약조건 강요, 불이익 제공이 포함된다. 소프트웨어 독점 공급 계약에서 일방적 서비스 정지권(TOS §8.4)이 불공정거래행위에 해당하는지 검토 가능.",
+    "translation": "불공정한 거래 방법으로 경쟁 저해·상대방 불이익 초래 금지. TOS §8.4 즉시 정지권의 불공정거래행위 해당 여부 검토 가능.",
+    "kt_risk": "Palantir의 TOS §8.4 일방적 즉시 정지권이 거래상 지위 남용에 해당할 수 있음. 공정위 신고 또는 불공정거래행위 주장 가능성. 다만 입증 부담은 KT에 있음."
+  },
+  "XC-001": {
+    "doc": "충돌",
+    "section": "SAA §6.2 vs TOS §8.2",
+    "title": "치유 기간 충돌 (20일 vs 30일)",
+    "text": "SAA §6.2: material breach 통보 후 20일 이내 치유 없으면 해지 가능.\nTOS §8.2: material breach 통보 후 30일 이내 치유 없으면 해지 가능.\n\n문서 우선순위(Order Form > SAA > TOS)상 SAA 20일이 원칙. 그러나 TOS §8.4 즉시 정지권이 치유 기간을 무력화할 수 있어 실질 치유 기간이 0일이 될 수 있음.",
+    "translation": "해지 통보 후 치유 기간: SAA 20일 vs TOS 30일. 원칙상 SAA 우선이나 TOS §8.4로 우회 가능.",
+    "kt_risk": "Palantir이 TOS §8.4 즉시 정지 시 KT는 치유 기회 없이 서비스 중단. SAA 20일 치유 기간 주장의 실효성 문제."
+  },
+  "XC-002": {
+    "doc": "충돌",
+    "section": "SAA §8.2 vs TOS §12",
+    "title": "Liability Cap 충돌 ($10M vs $100K)",
+    "text": "SAA §8.2: 최대 책임 한도 = max(직전 12개월 Partner Compensation, USD $10,000,000).\nTOS §12: 최대 책임 한도 = max(직전 12개월 지급 비용, USD $100,000).\n\nTOS Cap($100K)은 SAA Cap($10M)의 1/100 수준. SAA 우선 적용 원칙이나 Palantir이 TOS를 주장하면 KT 손해배상 수령 한도가 100배 줄어듦.",
+    "translation": "손해배상 한도: SAA $10M vs TOS $100K. SAA 우선이나 Palantir의 TOS 주장 시 배상 1/100로 축소.",
+    "kt_risk": "분쟁 시 Palantir이 TOS §12 적용 주장 시 KT 실질 손해배상 대폭 축소. SAA Cap 적용 명시 필요."
+  },
+  "XC-003": {
+    "doc": "충돌",
+    "section": "SAA §9.0 vs TOS §13",
+    "title": "준거법·중재지 충돌 (한국법/서울 vs 영국법/런던)",
+    "text": "SAA §9.0: KT(미주 외 소재)에 대해 한국법 적용, 서울 ICC 중재.\nTOS §13: 영국법 적용, 런던 ICC 중재.\n\nSAA 우선 원칙상 한국법/서울 ICC가 맞으나 Palantir이 TOS 근거로 영국법/런던 중재 주장 시 분쟁. 런던 중재 시 KT 비용·시간 부담 급증.",
+    "translation": "준거법·중재지: SAA 한국법/서울 ICC vs TOS 영국법/런던 ICC. SAA 우선이나 분쟁 시 혼란 가능.",
+    "kt_risk": "분쟁 시 준거법 확정 자체가 선결 쟁점. 런던 중재 주장 시 KT 비용 증가 및 한국법 보호 미적용 리스크."
+  },
+  "XC-004": {
+    "doc": "충돌",
+    "section": "TOS §8.4 vs SAA §6.2",
+    "title": "서비스 즉시 정지권 (치유 기간 우회)",
+    "text": "TOS §8.4: Palantir이 합리적으로 판단·의심할 경우 사전 통보와 동시에 또는 이전에 서비스 즉시 정지 가능. 트리거: 계약 위반 의심, 법령 위반, Palantir 또는 타 고객에 대한 중대한 위험.\nSAA §6.2: material breach 시 20일 서면 통보 후 치유 기간 보장.\n\n핵심 충돌: TOS §8.4는 의심만으로 즉시 정지 가능하여 SAA §6.2의 20일 치유 기간을 완전히 무력화.",
+    "translation": "Palantir의 즉시 정지권(TOS §8.4)이 SAA의 20일 치유 기간(§6.2)을 우회. 가장 위험한 충돌.",
+    "kt_risk": "대금 미지급·보안 이슈·계약 위반 의심 시 치유 기회 없이 서비스 즉시 중단. 합리적 의심이라는 낮은 기준 적용."
+  },
+  "XC-005": {
+    "doc": "충돌",
+    "section": "SAA §6.3 vs OF4 Billing",
+    "title": "해지 후 잔여 Fee 처리 충돌",
+    "text": "SAA §6.3: Hurdle 미달성 해지 시 잔여 수익 배분은 good faith 협상.\nOF4 Billing: SAA 해지 시 OF4 잔여 Fee는 ratable 기준(비례 계산)으로 처리.\n\n충돌 포인트: 협상(SAA)과 고정 ratable(OF4) 중 어느 기준이 적용되는지. OF4는 Order Form으로 SAA보다 우선 적용 원칙.",
+    "translation": "해지 후 잔여 Fee: SAA는 협상, OF4는 ratable 고정. Order Form 우선 원칙상 OF4 기준 적용 가능성 높음.",
+    "kt_risk": "해지 시 KT가 협상 주장해도 Palantir이 OF4 ratable 기준 주장 가능. 편의해지 불가 조항과 결합 시 KT 레버리지 급감."
+  },
+  "IC-001": {
+    "doc": "충돌",
+    "section": "SAA §1.3.2 vs SAA §2.10",
+    "title": "독점 판매 금지 vs EBT 협의 권한",
+    "text": "SAA §1.3.2: Palantir은 KT 동의 없이 Target Market에 직접 판매 금지.\nSAA §2.10(EBT): KT가 발굴했으나 고객이 Palantir 직접 계약을 원하는 경우, 양사 협의로 Palantir 수익을 Hurdle에 산입 가능.\n\n충돌 포인트: Palantir의 직접 접촉이 §1.3.2 위반인지 §2.10 EBT 절차의 일부인지 구분 필요. EBT는 KT의 사전 발굴·등록이 전제조건.",
+    "translation": "Palantir 직접 판매 금지(§1.3.2)와 EBT 예외(§2.10)의 경계. KT 사전 등록 여부가 핵심 판단 기준.",
+    "kt_risk": "Palantir이 KT 미등록 고객에 접촉 후 EBT를 주장하면 §1.3.2 위반. KT의 Opportunity Registration 선행 여부 반드시 확인."
+  },
+  "IC-002": {
+    "doc": "충돌",
+    "section": "SAA §6.3 vs SAA §2.11",
+    "title": "Surviving QRC 배분 방식 충돌",
+    "text": "SAA §6.3(Effect of Termination): 해지 후 Surviving QRC 수익 배분은 good faith 협상.\nSAA §2.11(Commercial Annex): 해지 후 Surviving QRC 수익 = KT 10% / Palantir 90% 고정.\n\n충돌 포인트: §6.3(협상)과 §2.11(고정) 중 어느 조항 우선인가. Commercial Annex(Schedule A)는 SAA 본문보다 우선 적용됨.",
+    "translation": "해지 후 수익 배분: SAA 본문은 협상, Commercial Annex는 KT 10%/Palantir 90% 고정. Annex 우선 적용.",
+    "kt_risk": "Hurdle 미달성 해지 시 KT 수익이 10%로 고정될 가능성 높음. 협상 가능성이 매우 제한됨."
+  },
+  "EC-001": {
+    "doc": "충돌",
+    "section": "TOS §7 vs 하도급지침",
+    "title": "연체이자율 충돌 (월 1.5% vs 하도급법 고시 이율)",
+    "text": "TOS §7: 연체 시 월 1.5%(연 18%) 또는 법적 최고 이율 중 낮은 쪽.\n하도급지침 제8조: 하도급대금 지급 지연 시 공정위 고시 이율 적용(현재 연 15.5% 수준).\n\n충돌 포인트: TOS 월 1.5%(연 18%)는 하도급법 고시 이율(연 15.5%)보다 높음. 하도급법 적용 거래라면 하도급법이 강행규정으로 우선.",
+    "translation": "연체이자: TOS 월 1.5%(연 18%) vs 하도급법 고시 이율(연 15.5%). 하도급법 적용 시 법령 우선.",
+    "kt_risk": "하도급법 적용 여부에 따라 이율 결정. KT가 하도급법 적용을 주장하면 TOS보다 낮은 이율 적용 가능."
+  },
+  "EC-002": {
+    "doc": "충돌",
+    "section": "하도급지침 제8조7 vs SAA §6.2 vs TOS §8.2",
+    "title": "해지 최고 기간 3중 충돌",
+    "text": "하도급지침 제8조7: 1개월 이상 최고 후 해지.\nSAA §6.2: 20일 서면 통보 후 해지.\nTOS §8.2: 30일 서면 통보 후 해지.\n\n하도급법 적용 거래라면 1개월 기준이 강행규정으로 우선. KT-Palantir 관계에서 하도급법 적용 여부(원사업자/수급사업자 해당 여부)가 핵심 선결 쟁점.",
+    "translation": "해지 최고 기간: 하도급지침 1개월 vs SAA 20일 vs TOS 30일. 하도급법 적용 시 1개월 강행.",
+    "kt_risk": "Palantir이 SAA 20일 기준 해지 통보 시 KT가 하도급법 1개월 기준 주장 가능. 하도급법 적용 여부 법무 검토 필요."
+  },
+  "EC-003": {
+    "doc": "충돌",
+    "section": "정보보호지침 제43조 vs OF4",
+    "title": "CISO 보안성 승인 vs OF4 즉시 사용",
+    "text": "정보보호지침 제43조: 신규 정보시스템 구축·변경 전 CISO 보안성 승인 필수.\nOF4 Cloud: 계약 즉시 PoC Azure 환경 사용 가능, 2025년 3월부터 과금 시작.\n\n충돌 포인트: OF4 서명 즉시 Azure 사용 의무 발생하나 내규상 CISO 승인이 선행되어야 함. 승인 전 사용 시 내규 위반 상태 발생.",
+    "translation": "CISO 승인 전 Azure 사용 불가(내규) vs 계약 즉시 사용 개시(OF4). 내규 위반 상태에서 계약 이행 중일 가능성.",
+    "kt_risk": "CISO 승인 미취득 상태에서 Azure 사용 중이면 내부 감사 지적 및 정보보호법 위반 가능. 소급 승인 취득 여부 확인 필요."
+  },
+  "EC-004": {
+    "doc": "충돌",
+    "section": "정보보호지침 제44조 vs TOS §3",
+    "title": "가급 자산 외부 제공 vs TOS 데이터 처리 허용",
+    "text": "정보보호지침 제44조: 가급 정보자산은 부문정보보안관리자 사전승인 없이 외부 유출·공개 불가.\nTOS §3: KT는 Palantir 플랫폼에 데이터 업로드·처리 가능. Palantir은 서비스 제공 목적으로만 사용.\n\n충돌 포인트: KT 내부 데이터(특히 가급 자산)를 Palantir 플랫폼에 업로드할 때 내규상 사전승인 절차 이행 여부.",
+    "translation": "가급 자산 외부 제공 사전승인(내규) vs TOS의 데이터 업로드·처리 허용. 내규 절차 준수 여부가 핵심.",
+    "kt_risk": "사전승인 없이 고객 데이터·핵심 자산을 Azure에 업로드 시 내규 위반. 데이터 침해 시 KT 책임 가중."
+  },
+  "EC-005": {
+    "doc": "충돌",
+    "section": "회계규정 제32조 vs OF4 Billing",
+    "title": "예산 범위 내 지출 원칙 vs OF4 즉시 $4M 지급",
+    "text": "회계규정 제32조: 지출은 성립된 예산의 범위 내에서만 가능. 예외 시 재무실 예산주무부서 장과 사전 협의 필수.\nOF4: 서명 즉시(Upon execution) USD $4,000,000 지급 의무 발생.\n\n충돌 포인트: 2025년 3월 계약 서명 시 $4M 예산이 사전 편성되어 있었는지, 재무실 사전 협의가 이루어졌는지 여부.",
+    "translation": "예산 범위 내 지출 원칙(내규) vs 서명 즉시 $4M 지급 의무(OF4). 사전 예산 편성·재무실 협의 여부가 핵심.",
+    "kt_risk": "예산 미편성 상태에서 $4M 집행 시 회계규정 위반. 내부 감사 지적 가능. 재무실 사전 협의 문서 확보 필요."
+  }
 };
 
 // --- KNOWLEDGE BASE -----------------------------------------------------------
@@ -893,6 +913,16 @@ let CONTRACT_KB = {
 };
 
 // --- KB PATCH ENGINE ----------------------------------------------------------
+function shouldPreserveExistingTranslation(existingText, existingTranslation, incomingTranslation, incomingFullText) {
+ if (!incomingTranslation) return true;
+ const current = (existingTranslation || "").trim();
+ if (!current) return false;
+ const original = (incomingFullText || existingText || "").trim();
+ const incomingLooksSummary = isLikelySummaryTranslation(original, incomingTranslation);
+ const currentLooksDetailed = !isLikelySummaryTranslation(existingText || original, current);
+ return incomingLooksSummary && currentLooksDetailed;
+}
+
 function applyPatchesToKB(patches) {
  for (const p of patches) {
  const clause = CONTRACT_KB.clauses.find(c => c.id === p.clauseId);
@@ -917,8 +947,12 @@ function applyPatchesToKB(patches) {
  });
  }
  if (CLAUSE_FULLTEXT[p.clauseId]) {
+ const currentClauseText = CLAUSE_FULLTEXT[p.clauseId].text;
+ const currentTranslation = CLAUSE_FULLTEXT[p.clauseId].translation;
  if (p.newFullText) CLAUSE_FULLTEXT[p.clauseId].text = p.newFullText;
- if (p.newTranslation) CLAUSE_FULLTEXT[p.clauseId].translation = p.newTranslation;
+ if (p.newTranslation && !shouldPreserveExistingTranslation(currentClauseText, currentTranslation, p.newTranslation, p.newFullText)) {
+ CLAUSE_FULLTEXT[p.clauseId].translation = p.newTranslation;
+ }
  if (p.newContext) CLAUSE_FULLTEXT[p.clauseId].context = p.newContext;
  CLAUSE_FULLTEXT[p.clauseId]._amended = true;
  CLAUSE_FULLTEXT[p.clauseId]._amendedBy = p.amendedBy;
@@ -1794,14 +1828,24 @@ function linkifyClauses(text, onOpen) {
  ].filter((v,i,a) => a.indexOf(v) === i);
 
  const patterns = [];
+ const appendixAlias = {
+ "SAA-APP6": ["Appendix 6", "Appendix6", "APPENDIX 6", "Appendix VI"],
+ "SAA-APP7": ["Appendix 7", "Appendix7", "APPENDIX 7", "Appendix VII"],
+ };
  for (const id of allIds) {
  patterns.push({ pat: id, id });
- const m = id.match(/^(SAA|TOS|OF3|OF4|REG)-(.+)$/);
+  const m = id.match(/^(SAA|TOS|OF3|OF4|REG|LAW|XC|IC|EC)-(.+)$/);
  if (m) {
  patterns.push({ pat: m[1] + " §" + m[2], id });
  patterns.push({ pat: m[1] + "§" + m[2], id });
  patterns.push({ pat: m[1] + " " + m[2], id });
  patterns.push({ pat: "§" + m[2], id });
+ if (/^[0-9]+(\.[0-9]+)+$/.test(m[2])) {
+ patterns.push({ pat: m[2], id });
+ }
+ }
+ if (appendixAlias[id]) {
+ for (const alias of appendixAlias[id]) patterns.push({ pat: alias, id });
  }
  }
  patterns.sort((a,b) => b.pat.length - a.pat.length);
@@ -1811,12 +1855,18 @@ function linkifyClauses(text, onOpen) {
  const next = [];
  for (const seg of segs) {
  if (seg.matched) { next.push(seg); continue; }
- const idx = seg.text.indexOf(pat);
- if (idx === -1) { next.push(seg); continue; }
- if (idx > 0) next.push({ text: seg.text.slice(0, idx), matched: false });
+ let rest = seg.text;
+ let foundAny = false;
+ while (true) {
+ const idx = rest.indexOf(pat);
+ if (idx === -1) break;
+ foundAny = true;
+ if (idx > 0) next.push({ text: rest.slice(0, idx), matched: false });
  next.push({ text: pat, matched: true, id });
- const rest = seg.text.slice(idx + pat.length);
+ rest = rest.slice(idx + pat.length);
+ }
  if (rest) next.push({ text: rest, matched: false });
+ if (!foundAny && !rest) next.push({ text: seg.text, matched: false });
  }
  segs = next;
  }
@@ -1828,10 +1878,10 @@ function linkifyClauses(text, onOpen) {
  const seg = segs[i];
  expanded.push(seg);
  if (seg.matched && i + 1 < segs.length && !segs[i+1].matched) {
- const prefix = seg.id.match(/^(SAA|TOS|OF3|OF4|REG|XC|IC|EC)/)?.[1];
+ const prefix = seg.id.match(/^(SAA|TOS|OF3|OF4|REG|LAW|XC|IC|EC)/)?.[1];
  if (!prefix) continue;
  let rest = segs[i+1].text;
- const slashPat = /^(\/)([\d.]+)/;
+  const slashPat = /^([\/-])([\d.]+)/;
  let m2;
  let consumed = "";
  let extraSegs = [];
@@ -1840,7 +1890,7 @@ function linkifyClauses(text, onOpen) {
  const found = allIds.find(id => id === candidateId);
  if (!found) break;
  consumed += m2[1]; // "/"
- extraSegs.push({ text: "/", matched: false });
+ extraSegs.push({ text: m2[1], matched: false });
  extraSegs.push({ text: m2[2], matched: true, id: found });
  rest = rest.slice(m2[0].length);
  }
@@ -1896,12 +1946,151 @@ function renderBoldLines(text) {
  ));
 }
 
+function hasEnglishBody(text) {
+ if (!text) return false;
+ const letters = (text.match(/[A-Za-z]/g) || []).length;
+ return letters >= 40;
+}
+
+function isLikelySummaryTranslation(originalText, translationText) {
+ if (!hasEnglishBody(originalText)) return false;
+ if (!translationText) return true;
+ const oLen = (originalText || "").replace(/\s+/g, "").length;
+ const tLen = (translationText || "").replace(/\s+/g, "").length;
+ if (!oLen) return false;
+ return tLen < Math.max(120, Math.floor(oLen * 0.45));
+}
+
+async function loadStoredFullTranslations() {
+ let bank = {};
+ try {
+ const raw = await storage.get(FULL_TRANSLATION_BANK_KEY);
+ bank = raw ? JSON.parse(raw) : {};
+ } catch (e) {
+ bank = {};
+ }
+
+ for (const [clauseId, tr] of Object.entries(bank)) {
+ if (!tr || !CLAUSE_FULLTEXT[clauseId]) continue;
+ _fullTranslationCache.set(clauseId, tr);
+ CLAUSE_FULLTEXT[clauseId].translation = tr;
+ }
+ return bank;
+}
+
+async function saveStoredFullTranslations(bank) {
+ try {
+ await storage.set(FULL_TRANSLATION_BANK_KEY, JSON.stringify(bank));
+ } catch (e) {}
+}
+
+function getClausesNeedingFullTranslation() {
+ return Object.entries(CLAUSE_FULLTEXT)
+ .filter(([_, data]) => hasEnglishBody(data?.text))
+ .filter(([id, data]) => {
+ const current = _fullTranslationCache.get(id) || data?.translation || "";
+ return isLikelySummaryTranslation(data?.text, current);
+ })
+ .map(([id, data]) => ({ id, data }));
+}
+
+async function buildAndPersistFullTranslationBank({ onProgress } = {}) {
+ const bank = await loadStoredFullTranslations();
+ const targets = getClausesNeedingFullTranslation();
+ const total = targets.length;
+ let done = 0;
+ let failed = 0;
+
+ for (const { id, data } of targets) {
+ try {
+ const translated = await requestFullClauseTranslation(data);
+ if (translated) {
+ bank[id] = translated;
+ _fullTranslationCache.set(id, translated);
+ CLAUSE_FULLTEXT[id].translation = translated;
+ }
+ } catch (e) {
+ failed += 1;
+ }
+ done += 1;
+ if (done % 3 === 0 || done === total) {
+ await saveStoredFullTranslations(bank);
+ }
+ if (onProgress) onProgress({ done, failed, total });
+ }
+ return { done, failed, total };
+}
+
+async function requestFullClauseTranslation(data) {
+ const original = (data?.text || "").trim();
+ if (!original) return "";
+ const prompt = [
+  "다음 계약 조항을 한국어로 전문 완역하시오.",
+  "요약 금지, 생략 금지, 항목/번호/단서를 모두 유지하시오.",
+  "의미를 바꾸지 말고 원문 구조를 최대한 보존하시오.",
+  "응답은 번역문 본문만 출력하고, 설명/주석/머리말을 붙이지 마시오.",
+  "",
+  `[조항 ID] ${data?.section || ""}`,
+  `[조항 제목] ${data?.title || ""}`,
+  "[원문]",
+  original,
+ ].join("\n");
+
+ const resp = await fetch("/api/chat", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+   max_tokens: 3000,
+   messages: [{ role: "user", content: prompt }],
+  }),
+ });
+ const payload = await resp.json();
+ if (!resp.ok) {
+  const errText = payload?.error?.message || payload?.error || JSON.stringify(payload);
+  throw new Error(typeof errText === "string" ? errText : "전문 번역 생성 실패");
+ }
+ const text = (payload?.content || []).map((c) => c?.text || "").join("\n").trim();
+ if (!text) throw new Error("전문 번역 생성 결과가 비어 있습니다.");
+ return text;
+}
+
 function ClauseDrawer({ clauseId, onClose }) {
- const [tab, setTab] = useState("ko"); // 기본: 한국어 우선
+ const [tab, setTab] = useState("both"); // 기본: 원문+번역 병기
  const data = CLAUSE_FULLTEXT[clauseId];
+ const [fullTranslation, setFullTranslation] = useState(data?.translation || "");
+ const [translationBusy, setTranslationBusy] = useState(false);
+ const [translationErr, setTranslationErr] = useState(null);
  if (!clauseId) return null;
  const docColor = DOC_COLOR[data?.doc] || "#c8d0dc";
- const hasTranslation = !!data?.translation;
+
+ useEffect(() => {
+  setTab(data?.translation ? "both" : "en");
+  setTranslationErr(null);
+  const cached = _fullTranslationCache.get(clauseId);
+  const base = cached || data?.translation || "";
+  setFullTranslation(base);
+    return undefined;
+ }, [clauseId, data]);
+
+ const hasTranslation = !!fullTranslation;
+
+ const handleRegenerateTranslation = async () => {
+  setTranslationErr(null);
+  setTranslationBusy(true);
+  try {
+   const translated = await requestFullClauseTranslation(data);
+   _fullTranslationCache.set(clauseId, translated);
+    CLAUSE_FULLTEXT[clauseId].translation = translated;
+    const bank = Object.fromEntries(_fullTranslationCache);
+    await saveStoredFullTranslations(bank);
+   setFullTranslation(translated);
+  } catch (e) {
+   setTranslationErr(e.message || "전문 번역 생성 실패");
+  } finally {
+   setTranslationBusy(false);
+  }
+ };
+
  return (
  <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:100,background:"#0a0a14",borderTop:`2px solid ${docColor}44`,boxShadow:"0 -8px 32px #00000088",maxHeight:"50vh",display:"flex",flexDirection:"column"}}>
  <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 20px",borderBottom:"1px solid #1a1a2e",flexShrink:0}}>
@@ -1928,8 +2117,34 @@ function ClauseDrawer({ clauseId, onClose }) {
  <div>
  <div style={{fontSize:10,color:"#6677aa",letterSpacing:"0.08em",marginBottom:8}}>{"한국어 번역"}</div>
  <div style={{fontSize:11,color:"#c8d0dc",lineHeight:1.9,background:"#07070f",padding:"12px 14px",borderRadius:6,border:`1px solid ${docColor}22`}}>
- {renderBoldLines(data.translation)}
+ {renderBoldLines(fullTranslation)}
  </div>
+ {translationBusy && <div style={{marginTop:7,fontSize:10,color:"#7db8f7"}}>전문 번역 생성 중...</div>}
+ {translationErr && <div style={{marginTop:7,fontSize:10,color:"#f87171"}}>번역 생성 실패: {translationErr}</div>}
+ <button
+  onClick={handleRegenerateTranslation}
+  disabled={translationBusy || !data?.text}
+  style={{marginTop:8,fontSize:10,color:docColor,background:docColor+"12",border:`1px solid ${docColor}33`,borderRadius:4,padding:"4px 10px",cursor:(translationBusy || !data?.text)?"not-allowed":"pointer",fontFamily:"inherit",opacity:(translationBusy || !data?.text)?0.6:1}}
+ >
+  전문완역 다시 생성
+ </button>
+ </div>
+ )}
+ {(tab==="ko"||tab==="both") && !hasTranslation && (
+ <div>
+ <div style={{fontSize:10,color:"#6677aa",letterSpacing:"0.08em",marginBottom:8}}>{"한국어 번역"}</div>
+ <div style={{fontSize:11,color:"#9aaabb",lineHeight:1.8,background:"#07070f",padding:"12px 14px",borderRadius:6,border:`1px solid ${docColor}22`}}>
+ {translationBusy ? "전문 번역 생성 중..." : "번역 데이터 없음"}
+ </div>
+ {!translationBusy && (
+ <button
+  onClick={handleRegenerateTranslation}
+  disabled={!data?.text}
+  style={{marginTop:8,fontSize:10,color:docColor,background:docColor+"12",border:`1px solid ${docColor}33`,borderRadius:4,padding:"4px 10px",cursor:!data?.text?"not-allowed":"pointer",fontFamily:"inherit",opacity:!data?.text?0.6:1}}
+ >
+  전문완역 생성
+ </button>
+ )}
  </div>
  )}
  <div>
@@ -2002,7 +2217,7 @@ function ActionCard({ action, index, onOpen }) {
 // --- DOCUMENT UPLOADER --------------------------------------------------------
 
 // --- DOCUMENT MANAGER TAB -----------------------------------------------------
-function DocumentManagerTab({ onKBUpdated, onAmendmentsFromUpload }) {
+function DocumentManagerTab({ onKBUpdated, onAmendmentsFromUpload, onOpenClause }) {
  const [docs, setDocs] = useState([]); // 등록된 문서 목록
  const [clauses, setClauses] = useState(CONTRACT_KB.clauses); // 전체 조항 (기본값: 하드코딩 KB)
  const [conflicts, setConflicts] = useState(CONTRACT_KB.conflicts); // 전체 충돌 (기본값: 하드코딩 KB)
@@ -2561,17 +2776,17 @@ function DocumentManagerTab({ onKBUpdated, onAmendmentsFromUpload }) {
  <div key={cf.id||i} style={{marginBottom:8, padding:'10px 12px', borderRadius:5,
  border:`1px solid ${rc}33`, background:rc+'08'}}>
  <div style={{display:'flex', alignItems:'center', gap:6, marginBottom:5}}>
- <span style={{fontSize:9, fontWeight:700, color:rc, background:rc+'18', padding:'1px 6px', borderRadius:2}}>{cf.id}</span>
+ <span style={{fontSize:9, fontWeight:700, color:rc, background:rc+'18', padding:'1px 6px', borderRadius:2}}>{linkifyClauses(cf.id, onOpenClause)}</span>
  <span style={{fontSize:10, color:'#c8d0dc', fontWeight:600, flex:1}}>{cf.topic}</span>
  <span style={{fontSize:9, fontWeight:700, color:rc,
  background:rc+'18', padding:'2px 7px', borderRadius:3}}>{cf.risk}</span>
  </div>
- <div style={{fontSize:10, color:'#9aaabb', lineHeight:1.6}}>{cf.summary}</div>
+ <div style={{fontSize:10, color:'#9aaabb', lineHeight:1.6}}>{linkifyClauses(cf.summary, onOpenClause)}</div>
  {cf.clauseIds && cf.clauseIds.length > 0 && (
  <div style={{marginTop:5, display:'flex', gap:4, flexWrap:'wrap'}}>
  {cf.clauseIds.map(id=>(
  <span key={id} style={{fontSize:8, color:'#60a5fa', background:'#60a5fa18',
- padding:'1px 5px', borderRadius:2}}>{id}</span>
+ padding:'1px 5px', borderRadius:2}}>{linkifyClauses(id, onOpenClause)}</span>
  ))}
  </div>
  )}
@@ -2600,18 +2815,18 @@ function DocumentManagerTab({ onKBUpdated, onAmendmentsFromUpload }) {
  background:c._amended?'#120a04':c._new?'#04120a':'#0a0a14'}}>
  <div style={{display:'flex', alignItems:'center', gap:6, marginBottom:4}}>
  <span style={{fontSize:9, fontWeight:700, color:dc, background:dc+'18',
- padding:'1px 6px', borderRadius:2}}>{c.id}</span>
+ padding:'1px 6px', borderRadius:2}}>{linkifyClauses(c.id, onOpenClause)}</span>
  <span style={{fontSize:10, color:'#c8d0dc', fontWeight:600, flex:1}}>{c.topic}</span>
  {c._amended && <span style={{fontSize:8, color:'#fb923c', background:'#fb923c18',
  padding:'1px 5px', borderRadius:2, fontWeight:700}}>수정됨</span>}
  {c._new && <span style={{fontSize:8, color:'#10b981', background:'#10b98118',
  padding:'1px 5px', borderRadius:2, fontWeight:700}}>신규</span>}
  </div>
- <div style={{fontSize:10, color:'#9aaabb', lineHeight:1.6}}>{c.core}</div>
+ <div style={{fontSize:10, color:'#9aaabb', lineHeight:1.6}}>{linkifyClauses(c.core, onOpenClause)}</div>
  {c._prevCore && (
  <div style={{marginTop:5, fontSize:9, color:'#475569', textDecoration:'line-through',
  borderTop:'1px solid #1e2030', paddingTop:4}}>
- 이전: {c._prevCore}
+ 이전: {linkifyClauses(c._prevCore, onOpenClause)}
  </div>
  )}
  {c._amendedBy && (
@@ -2644,7 +2859,7 @@ const AMENDMENT_PARSE_PROMPT = `다음 계약 문서(Amendment, 신규 계약서
  "newTopic": "변경된 주제명 (수정/추가 시)",
  "newCore": "변경된 핵심 내용 요약 (한국어, 1-2문장, KB core 필드에 직접 들어감)",
  "newFullText": "변경된 조항 원문 영어 전체 (없으면 null)",
- "newTranslation": "변경된 한국어 번역 (없으면 null)",
+ "newTranslation": "변경된 조항의 한국어 전문완역 (요약 금지, 생략 금지, 없으면 null)",
  "newContext": "변경 맥락 및 KT 영향 분석 (한국어)",
  "deletionReason": "삭제 이유 (삭제 시만)",
  "newConflicts": [{"id":"XC-NEW-001","risk":"HIGH|MEDIUM|LOW","topic":"충돌주제","summary":"충돌요약"}]
@@ -2652,7 +2867,12 @@ const AMENDMENT_PARSE_PROMPT = `다음 계약 문서(Amendment, 신규 계약서
  ]
 }
 
-기존 조항 ID 목록(참고): SAA-1.3.1, SAA-1.3.2, SAA-1.6.8, SAA-2.10, SAA-2.11, SAA-6.2, SAA-6.3, SAA-8.2, SAA-9.0, OF3-FEES, OF4-FEES, OF4-CLOUD, TOS-7, TOS-8.2, TOS-8.4, TOS-12, TOS-13`;
+기존 조항 ID 목록(참고): SAA-1.3.1, SAA-1.3.2, SAA-1.6.8, SAA-2.10, SAA-2.11, SAA-6.2, SAA-6.3, SAA-8.2, SAA-9.0, OF3-FEES, OF4-FEES, OF4-CLOUD, TOS-7, TOS-8.2, TOS-8.4, TOS-12, TOS-13
+
+번역 품질 규칙:
+- newTranslation은 반드시 전문완역으로 작성. 핵심만 추려 쓴 요약문 금지.
+- 항목 번호, 단서, 예외, 금액, 기간, 조건을 절대 생략하지 말 것.
+- 원문이 영어인 경우에도 문장 전체를 한국어로 번역해서 제공할 것.`;
 
 // --- KB AMENDMENT MANAGER -----------------------------------------------------
 function AmendmentManager({ onAmendmentsChange }) {
@@ -2894,7 +3114,7 @@ function AmendmentManager({ onAmendmentsChange }) {
  );
 }
 
-function FollowupChat({ result, mode, amendments=[] }) {
+function FollowupChat({ result, mode, amendments=[], onOpenClause }) {
  const [messages, setMessages] = useState([]);
  const [input, setInput] = useState("");
  const [loading, setLoading] = useState(false);
@@ -2945,7 +3165,9 @@ function FollowupChat({ result, mode, amendments=[] }) {
  {messages.map((m,i)=>(
  <div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start"}}>
  <div style={{maxWidth:"85%",padding:"8px 12px",borderRadius:6,background:m.role==="user"?"#0f1e35":"#0f0f1a",border:`1px solid ${m.role==="user"?"#1e3a5f":"#1e2030"}`,fontSize:13,color:"#c8d0dc",lineHeight:1.7,whiteSpace:"pre-wrap"}}>
- {m.content}
+ {m.content.split("\n").map((line, idx) => (
+ <span key={idx}>{linkifyClauses(line, onOpenClause)}{idx < m.content.split("\n").length - 1 && <br/>}</span>
+ ))}
  </div>
  </div>
  ))}
@@ -2969,9 +3191,10 @@ function FollowupChat({ result, mode, amendments=[] }) {
  );
 }
 
-function AnalysisResult({ result, query, mode, amendments=[] }) {
+function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
  const [activeSection, setActiveSection] = useState("overview");
- const [viewingClause, setViewingClause] = useState(null);
+ const [localViewingClause, setLocalViewingClause] = useState(null);
+ const openClause = onOpenClause || setLocalViewingClause;
 
  const RISK = {
  HIGH: { color:"#ef4444", bg:"#1a0808", border:"#ef444433", label:"고위험", dot:"#ef4444" },
@@ -3026,7 +3249,7 @@ function AnalysisResult({ result, query, mode, amendments=[] }) {
  {result.triggered_clauses?.length||0}개 조항 · {result.related_conflicts?.length||0}건 충돌
  </span>
  </div>
- <div style={{fontSize:14,color:"#c8d8ec",fontWeight:500,lineHeight:1.65,fontFamily:"'Noto Serif KR',serif"}}>{linkifyClauses(result.situation_summary||"", setViewingClause)}</div>
+ <div style={{fontSize:14,color:"#c8d8ec",fontWeight:500,lineHeight:1.65,fontFamily:"'Noto Serif KR',serif"}}>{linkifyClauses(result.situation_summary||"", openClause)}</div>
  </div>
 
  {/* 탭 바 */}
@@ -3052,18 +3275,18 @@ function AnalysisResult({ result, query, mode, amendments=[] }) {
  {/* 핵심 결론 */}
  <Block style={{borderLeft:`3px solid ${R.color}`,background:R.bg}}>
  <MiniLabel>Bottom Line</MiniLabel>
- <div style={{fontSize:14,color:"#dce4f0",fontWeight:500,lineHeight:1.65,fontFamily:"'Noto Serif KR',serif"}}>{linkifyClauses(result.bottom_line||"", setViewingClause)}</div>
+ <div style={{fontSize:14,color:"#dce4f0",fontWeight:500,lineHeight:1.65,fontFamily:"'Noto Serif KR',serif"}}>{linkifyClauses(result.bottom_line||"", openClause)}</div>
  </Block>
 
  {/* 2단: KT vs Palantir */}
  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
  <Block>
  <MiniLabel>KT 방어 논거</MiniLabel>
- <div style={{fontSize:12,color:"#7db8f7",lineHeight:1.7,fontFamily:"'Noto Serif KR',serif"}}>{formatArgument(result.kt_defense,setViewingClause)}</div>
+ <div style={{fontSize:12,color:"#7db8f7",lineHeight:1.7,fontFamily:"'Noto Serif KR',serif"}}>{formatArgument(result.kt_defense,openClause)}</div>
  </Block>
  <Block style={{borderColor:"#ef444422"}}>
  <MiniLabel>Palantir 측 논거</MiniLabel>
- <div style={{fontSize:12,color:"#f87171",lineHeight:1.7,fontFamily:"'Noto Serif KR',serif"}}>{formatArgument(result.palantir_position,setViewingClause)}</div>
+ <div style={{fontSize:12,color:"#f87171",lineHeight:1.7,fontFamily:"'Noto Serif KR',serif"}}>{formatArgument(result.palantir_position,openClause)}</div>
  </Block>
  </div>
 
@@ -3142,7 +3365,7 @@ function AnalysisResult({ result, query, mode, amendments=[] }) {
  {activeSection==="clauses" && (
  <div>
  {result.triggered_clauses?.length>0
- ? result.triggered_clauses.map((c,i)=><ClauseCard key={i} clause={c} onViewFull={setViewingClause}/>)
+ ? result.triggered_clauses.map((c,i)=><ClauseCard key={i} clause={c} onViewFull={openClause}/>)
  : <div style={{fontSize:12,color:"#2d4060",textAlign:"center",padding:24,fontFamily:"'Noto Serif KR',serif"}}>관련 조항 없음</div>
  }
  </div>
@@ -3153,11 +3376,11 @@ function AnalysisResult({ result, query, mode, amendments=[] }) {
  <div>
  <Block>
  <MiniLabel>위험도 판단 근거</MiniLabel>
- <div style={{fontSize:13,color:"#a0b8d0",lineHeight:1.8,fontFamily:"'Noto Serif KR',serif"}}>{formatArgument(result.risk_reason,setViewingClause)}</div>
+ <div style={{fontSize:13,color:"#a0b8d0",lineHeight:1.8,fontFamily:"'Noto Serif KR',serif"}}>{formatArgument(result.risk_reason,openClause)}</div>
  </Block>
  <Block>
  <MiniLabel>법적 효과 분석</MiniLabel>
- <div style={{fontSize:13,color:"#a0b8d0",lineHeight:1.85,fontFamily:"'Noto Serif KR',serif"}}>{formatArgument(result.legal_analysis,setViewingClause)}</div>
+ <div style={{fontSize:13,color:"#a0b8d0",lineHeight:1.85,fontFamily:"'Noto Serif KR',serif"}}>{formatArgument(result.legal_analysis,openClause)}</div>
  </Block>
  </div>
  )}
@@ -3166,7 +3389,7 @@ function AnalysisResult({ result, query, mode, amendments=[] }) {
  {activeSection==="actions" && (
  <div>
  {result.immediate_actions?.length>0
- ? result.immediate_actions.map((a,i)=><ActionCard key={i} action={a} index={i} onOpen={setViewingClause}/>)
+ ? result.immediate_actions.map((a,i)=><ActionCard key={i} action={a} index={i} onOpen={openClause}/>)
  : <div style={{fontSize:12,color:"#2d4060",textAlign:"center",padding:24,fontFamily:"'Noto Serif KR',serif"}}>조치 사항 없음</div>
  }
  </div>
@@ -3175,10 +3398,10 @@ function AnalysisResult({ result, query, mode, amendments=[] }) {
  </div>
  </div>
 
- {viewingClause && <ClauseDrawer clauseId={viewingClause} onClose={()=>setViewingClause(null)}/>}
+ {!onOpenClause && localViewingClause && <ClauseDrawer clauseId={localViewingClause} onClose={()=>setLocalViewingClause(null)}/>}
 
  {result && <div style={{marginTop:10}}>
- <FollowupChat result={result} mode={mode} amendments={amendments}/>
+ <FollowupChat result={result} mode={mode} amendments={amendments} onOpenClause={openClause}/>
  </div>}
 
  <ReportButton result={result} query={query} mode={mode}/>
@@ -3187,7 +3410,7 @@ function AnalysisResult({ result, query, mode, amendments=[] }) {
 }
 
 // --- CLAUSE TIMELINE TAB ------------------------------------------------------
-function ClauseTimelineTab() {
+function ClauseTimelineTab({ onOpenClause }) {
  const [patchHistory, setPatchHistory] = useState([]);
  useEffect(() => {
  (async () => {
@@ -3326,7 +3549,7 @@ function ClauseTimelineTab() {
  padding:"1px 4px", borderRadius:2, whiteSpace:"nowrap"}}>
  {chgLabel[p.changeType]||p.changeType}
  </span>
- <span style={{fontSize:9, color:"#9aaabb"}}>{p.clauseId}</span>
+ <span style={{fontSize:9, color:"#9aaabb"}}>{linkifyClauses(p.clauseId, onOpenClause)}</span>
  </div>
  );
  })}
@@ -3354,7 +3577,7 @@ function ClauseTimelineTab() {
  background:selectedId===id?"#0f1e35":"#0f0f1a"}}>
  <div style={{display:"flex", alignItems:"center", gap:6}}>
  <span style={{fontSize:10, fontWeight:700,
- color:selectedId===id?"#60a5fa":"#9aaabb"}}>{id}</span>
+ color:selectedId===id?"#60a5fa":"#9aaabb"}}>{linkifyClauses(id, onOpenClause)}</span>
  <span style={{fontSize:8, color:cc, background:cc+"15",
  padding:"1px 4px", borderRadius:2, marginLeft:"auto"}}>
  {chgLabel[lastPatch?.changeType]||lastPatch?.changeType}
@@ -3417,7 +3640,7 @@ function ClauseTimelineTab() {
  <div style={{fontSize:10, color:"#8899aa", lineHeight:1.5,
  padding:"6px 10px", background:"#0f0f1a",
  borderLeft:`2px solid ${tc}44`, borderRadius:"0 4px 4px 0"}}>
- {h.summary}
+ {linkifyClauses(h.summary, onOpenClause)}
  </div>
  )}
  </div>
@@ -3434,20 +3657,20 @@ function ClauseTimelineTab() {
  background:cc+"18", padding:"1px 6px", borderRadius:2}}>
  {chgLabel[p.changeType]||p.changeType}
  </span>
- <span style={{fontSize:11, fontWeight:700, color:"#c8d0dc"}}>{p.clauseId}</span>
+ <span style={{fontSize:11, fontWeight:700, color:"#c8d0dc"}}>{linkifyClauses(p.clauseId, onOpenClause)}</span>
  {p.topic && <span style={{fontSize:9, color:"#6677aa"}}>{p.topic}</span>}
  </div>
  {p.prevCore && (
  <div style={{fontSize:9, color:"#6677aa", lineHeight:1.5,
  textDecoration:"line-through", marginBottom:4,
  padding:"4px 8px", background:"#1a0808", borderRadius:3}}>
- 이전: {p.prevCore}
+ 이전: {linkifyClauses(p.prevCore, onOpenClause)}
  </div>
  )}
  {p.newCore && (
  <div style={{fontSize:9, color:"#9aaabb", lineHeight:1.5,
  padding:"4px 8px", background:"#0a0a14", borderRadius:3}}>
- 변경: {p.newCore}
+ 변경: {linkifyClauses(p.newCore, onOpenClause)}
  </div>
  )}
  </div>
@@ -3466,7 +3689,7 @@ function ClauseTimelineTab() {
  selectedId ? (
  <>
  <div style={{marginBottom:16}}>
- <div style={{fontSize:13, fontWeight:700, color:"#c8d0dc", marginBottom:4}}>{selectedId}</div>
+ <div style={{fontSize:13, fontWeight:700, color:"#c8d0dc", marginBottom:4}}>{linkifyClauses(selectedId, onOpenClause)}</div>
  <div style={{fontSize:10, color:"#6677aa"}}>
  {clauseHistory.length}건의 문서에서 변경됨
  </div>
@@ -3479,7 +3702,7 @@ function ClauseTimelineTab() {
  <div style={{marginBottom:16, padding:"10px 12px",
  background:"#0a1a0a", border:"1px solid #10b98133", borderRadius:6}}>
  <div style={{fontSize:9, color:"#10b981", fontWeight:700, marginBottom:4}}>현재 상태</div>
- <div style={{fontSize:10, color:"#9aaabb", lineHeight:1.5}}>{cur.core}</div>
+ <div style={{fontSize:10, color:"#9aaabb", lineHeight:1.5}}>{linkifyClauses(cur.core, onOpenClause)}</div>
  {cur._amended && (
  <div style={{fontSize:8, color:"#fb923c", marginTop:3}}>⚡ 수정된 조항</div>
  )}
@@ -3513,13 +3736,13 @@ function ClauseTimelineTab() {
  <div style={{fontSize:9, color:"#6677aa", lineHeight:1.5,
  textDecoration:"line-through", padding:"4px 8px",
  background:"#1a0808", borderRadius:3, marginBottom:3}}>
- {p.prevCore}
+ {linkifyClauses(p.prevCore, onOpenClause)}
  </div>
  )}
  {p.newCore && (
  <div style={{fontSize:9, color:"#9aaabb", lineHeight:1.5,
  padding:"4px 8px", background:"#0a0a14", borderRadius:3}}>
- {p.newCore}
+ {linkifyClauses(p.newCore, onOpenClause)}
  </div>
  )}
  </div>
