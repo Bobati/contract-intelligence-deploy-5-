@@ -5036,25 +5036,23 @@ function HurdleTracker() {
  const [editId, setEditId] = useState(null);
 
  useEffect(() => {
- (async () => {
  try {
- const s1 = await storage.get(STORAGE_KEY);
- if (s1?.value) {
- const parsed = JSON.parse(s1.value);
- setRecords(parsed.records || []);
- setStartYear(parsed.startYear || 2025);
- }
- const s2 = await storage.get(PURCHASE_KEY);
- if (s2?.value) setPurchased(JSON.parse(s2.value));
+  const s1 = localStorage.getItem(STORAGE_KEY);
+  if (s1) {
+   const parsed = JSON.parse(s1);
+   setRecords(parsed.records || []);
+   setStartYear(parsed.startYear || 2025);
+  }
+  const s2 = localStorage.getItem(PURCHASE_KEY);
+  if (s2) setPurchased(JSON.parse(s2));
  } catch(e) {}
- })();
  }, []);
 
- const saveRecords = async (recs, sy) => {
- try { await storage.set(STORAGE_KEY, JSON.stringify({ records: recs, startYear: sy })); } catch(e) {}
+ const saveRecords = (recs, sy) => {
+ try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ records: recs, startYear: sy })); } catch(e) {}
  };
- const savePurchased = async (p) => {
- try { await storage.set(PURCHASE_KEY, JSON.stringify(p)); } catch(e) {}
+ const savePurchased = (p) => {
+ try { localStorage.setItem(PURCHASE_KEY, JSON.stringify(p)); } catch(e) {}
  };
 
  // -- Revenue 실적 계산 ------------------------------------------------------
@@ -5088,7 +5086,7 @@ function HurdleTracker() {
  newRecs = [...records, { id: Date.now(), ...record }];
  }
  setRecords(newRecs);
- await saveRecords(newRecs, startYear);
+ saveRecords(newRecs, startYear);
  setForm(EMPTY_FORM);
  setShowForm(false);
  };
@@ -5096,7 +5094,7 @@ function HurdleTracker() {
  const deleteRecord = async (id) => {
  const newRecs = records.filter(r => r.id !== id);
  setRecords(newRecs);
- await saveRecords(newRecs, startYear);
+ saveRecords(newRecs, startYear);
  };
 
  const startEdit = (r) => {
@@ -5112,7 +5110,7 @@ function HurdleTracker() {
  const togglePurchased = async (year) => {
  const next = { ...purchased, [year]: !purchased[year] };
  setPurchased(next);
- await savePurchased(next);
+ savePurchased(next);
  };
 
  const ctColor = { "Target Market":"#60a5fa", "KT그룹":"#34d399" };
