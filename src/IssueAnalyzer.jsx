@@ -205,7 +205,19 @@ export default function IssueAnalyzer() {
    userContent.push({ type: "document", source: { type: "text", data: raw.text }, title: doc.fileName });
   }
  }
- userContent.push({ type: "text", text: query });
+ // URL이 포함된 경우 내용 fetch
+ const urlMatch = query.match(/https?:\/\/[^\s]+/);
+ let finalQuery = query;
+ if (urlMatch) {
+  try {
+   const fetchRes = await fetch("/api/fetch-url", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ url: urlMatch[0] }) });
+   const fetchData = await fetchRes.json();
+   if (fetchData.content) {
+    finalQuery = query + "\n\n[URL 내용: " + urlMatch[0] + "]\n" + fetchData.content;
+   }
+  } catch(e) { /* URL fetch 실패 시 원본 쿼리 사용 */ }
+ }
+ userContent[userContent.length - 1] = { type: "text", text: finalQuery };
  const res = await fetch("/api/chat",{
  method:"POST", headers:{"Content-Type":"application/json"},
  body: JSON.stringify({
