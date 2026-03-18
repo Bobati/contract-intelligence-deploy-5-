@@ -366,7 +366,7 @@ export default function IssueAnalyzer() {
    <div style={{width:26,height:26,borderRadius:6,background:"linear-gradient(135deg,#1d4ed8,#0ea5e9)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:"#fff",letterSpacing:"-0.04em"}}>CI</div>
    <div>
     <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.1em",color:"#cbd5e1"}}>CONTRACT INTELLIGENCE</div>
-    <div style={{fontSize:9,color:"#475569",letterSpacing:"0.04em",marginTop:1}}>KT × Palantir Korea LLC</div>
+    <div style={{fontSize:11,color:"#475569",letterSpacing:"0.04em",marginTop:1}}>KT × Palantir Korea LLC</div>
    </div>
   </div>
   <div style={{width:1,height:24,background:"#334155",flexShrink:0}}/>
@@ -521,7 +521,7 @@ export default function IssueAnalyzer() {
           <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
            <div style={{width:5,height:5,borderRadius:"50%",background:rc,flexShrink:0}}/>
            <span style={{fontSize:10,color:rc,fontWeight:700}}>{h.result?.risk_level}</span>
-           {h.memo && <span style={{fontSize:8,color:"#a78bfa"}}>●</span>}
+           {h.memo && <span style={{fontSize:10,color:"#a78bfa"}}>●</span>}
            <span style={{fontSize:10,color:"#475569",marginLeft:"auto"}}>{h.ts}</span>
           </div>
           <div style={{fontSize:11,color:"#94a3b8",lineHeight:1.5}}>{h.query.length>38?h.query.slice(0,38)+"…":h.query}</div>
@@ -2009,8 +2009,8 @@ function DocManagerFollowupChat({ docs, clauses, conflicts, selectedDoc, onOpenC
  };
 
  return (
-  <div style={{ borderTop: "1px solid #1a1a2e", background: "#0a0a14", padding: "10px 12px" }}>
-   <div style={{fontSize:10,color:"#8899aa",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
+  <div style={{ borderTop: "1px solid #334155", background: "#020617", padding: "10px 12px" }}>
+   <div style={{fontSize:10,color:"#94a3b8",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
     <span style={{width:6,height:6,borderRadius:"50%",background:"#60a5fa",boxShadow:"0 0 6px #60a5fa"}}/>
     문서관리 추가 질문
     <span style={{color:"#475569"}}>문서·조항·충돌 상태를 기준으로 답변합니다</span>
@@ -2019,14 +2019,14 @@ function DocManagerFollowupChat({ docs, clauses, conflicts, selectedDoc, onOpenC
     <div style={{ maxHeight: 200, overflowY: "auto", padding: "0 0 8px", display: "flex", flexDirection: "column", gap: 7 }}>
      {messages.map((m, i) => (
       <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
-       <div style={{ maxWidth: "88%", padding: "7px 10px", borderRadius: 6, background: m.role === "user" ? "#0f1e35" : "#0f0f1a", border: `1px solid ${m.role === "user" ? "#1e3a5f" : "#1e2030"}`, fontSize: 11, color: "#c8d0dc", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
+       <div style={{ maxWidth: "88%", padding: "7px 10px", borderRadius: 6, background: m.role === "user" ? "#0f1e35" : "#1e293b", border: `1px solid ${m.role === "user" ? "#1e3a5f" : "#334155"}`, fontSize: 11, color: "#cbd5e1", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
         {m.content.split("\n").map((line, idx) => (
          <span key={idx}>{linkifyClauses(line, onOpenClause)}{idx < m.content.split("\n").length - 1 && <br/>}</span>
         ))}
        </div>
       </div>
      ))}
-     {loading && <div style={{display:"flex",justifyContent:"flex-start"}}><div style={{background:"#0f0f1a",border:"1px solid #1e2030",borderRadius:6,padding:"4px 8px"}}><TypingDots/></div></div>}
+     {loading && <div style={{display:"flex",justifyContent:"flex-start"}}><div style={{background:"#1e293b",border:"1px solid #334155",borderRadius:6,padding:"4px 8px"}}><TypingDots/></div></div>}
      <div ref={bottomRef} />
     </div>
    )}
@@ -2036,9 +2036,9 @@ function DocManagerFollowupChat({ docs, clauses, conflicts, selectedDoc, onOpenC
      onChange={e => setInput(e.target.value)}
      onKeyDown={e => e.key === "Enter" && !e.shiftKey && send()}
      placeholder="문서관리 상태에 대해 추가 질문..."
-     style={{ flex: 1, background: "#07070f", border: "1px solid #1e2030", borderRadius: 4, padding: "7px 10px", fontSize: 11, color: "#e2e8f0", fontFamily: "inherit", outline: "none" }}
+     style={{ flex: 1, background: "#07070f", border: "1px solid #334155", borderRadius: 4, padding: "7px 10px", fontSize: 11, color: "#e2e8f0", fontFamily: "inherit", outline: "none" }}
     />
-    <button onClick={send} disabled={!input.trim() || loading} style={{padding:"7px 12px",background:input.trim()&&!loading?"#1e3a6e":"#0f1525",border:`1px solid ${input.trim()&&!loading?"#60a5fa44":"#1e2030"}`,borderRadius:4,fontSize:11,color:input.trim()&&!loading?"#60a5fa":"#6677aa",cursor:input.trim()&&!loading?"pointer":"not-allowed",fontFamily:"inherit"}}>
+    <button onClick={send} disabled={!input.trim() || loading} style={{padding:"7px 12px",background:input.trim()&&!loading?"#1e3a6e":"#0f1525",border:`1px solid ${input.trim()&&!loading?"#60a5fa44":"#334155"}`,borderRadius:4,fontSize:11,color:input.trim()&&!loading?"#60a5fa":"#64748b",cursor:input.trim()&&!loading?"pointer":"not-allowed",fontFamily:"inherit"}}>
      전송
     </button>
    </div>
@@ -2055,7 +2055,7 @@ const DOC_TYPES = {
  REG: { label:"내규", color:"#34d399", desc:"KT 내부 규정" },
  AMD: { label:"Amendment", color:"#fb923c", desc:"계약 변경서" },
  NEW: { label:"신규", color:"#e879f9", desc:"신규 계약서" },
- OTHER: { label:"기타", color:"#8899aa", desc:"기타 문서" },
+ OTHER: { label:"기타", color:"#94a3b8", desc:"기타 문서" },
 };
 
 const CONFLICT_CHECK_PROMPT = (clauses, options = {}) => {
@@ -2290,7 +2290,7 @@ function TypingDots() {
  {[0,1,2].map(i=>(
  <div key={i} style={{width:5,height:5,borderRadius:"50%",background:"#60a5fa",animation:`bounce 1.2s ${i*0.2}s infinite`}}/>
  ))}
- <span style={{fontSize:11,color:"#8899aa",marginLeft:4}}>분석 중...</span>
+ <span style={{fontSize:11,color:"#94a3b8",marginLeft:4}}>분석 중...</span>
  </div>
  );
 }
@@ -2316,9 +2316,9 @@ function ClauseInlinePopup({ clauseId, children, onOpen }) {
  <span style={{position:"absolute",bottom:"calc(100% + 6px)",left:0,zIndex:200,minWidth:260,maxWidth:320,background:"#0d1220",border:`1px solid ${docColor}44`,borderRadius:6,padding:"8px 12px",boxShadow:"0 4px 20px #00000088",pointerEvents:"none"}}>
  <span style={{display:"block",fontSize:10,fontWeight:700,color:docColor,marginBottom:4}}>{info.doc} · {info.section}</span>
  <span style={{display:"block",fontSize:11,fontWeight:600,color:"#e2e8f0",marginBottom:4}}>{info.title}</span>
- <span style={{display:"block",fontSize:10,color:"#c8d0dc",lineHeight:1.6}}>{info.text?.slice(0,140)}{info.text?.length>140?"…":""}</span>
+ <span style={{display:"block",fontSize:10,color:"#cbd5e1",lineHeight:1.6}}>{info.text?.slice(0,140)}{info.text?.length>140?"…":""}</span>
  {info.context && <span style={{display:"block",fontSize:10,color:docColor+"cc",marginTop:4,lineHeight:1.5}}>{info.context.slice(0,100)}{info.context.length>100?"…":""}</span>}
- <span style={{display:"block",fontSize:9,color:"#6677aa",marginTop:6}}>{"클릭하면 전체 원문 보기"}</span>
+ <span style={{display:"block",fontSize:11,color:"#64748b",marginTop:6}}>{"클릭하면 전체 원문 보기"}</span>
  </span>
  )}
  </span>
@@ -2441,7 +2441,7 @@ function formatArgument(text, onOpen) {
  if (!m) return <div key={i} style={{marginBottom:4}}>{linkifyClauses(part, onOpen)}</div>;
  return (
  <div key={i} style={{display:"flex",gap:6,marginBottom:6,alignItems:"flex-start"}}>
- <span style={{minWidth:20,height:20,borderRadius:"50%",background:"#1e3a6e",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#60a5fa",flexShrink:0,marginTop:1}}>{m[1]}</span>
+ <span style={{minWidth:20,height:20,borderRadius:"50%",background:"#1e3a6e",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"#60a5fa",flexShrink:0,marginTop:1}}>{m[1]}</span>
  <span style={{lineHeight:1.7}}>{linkifyClauses(m[2].trim(), onOpen)}</span>
  </div>
  );
@@ -2581,7 +2581,7 @@ function ClauseDrawer({ clauseId, onClose }) {
  const [translationBusy, setTranslationBusy] = useState(false);
  const [translationErr, setTranslationErr] = useState(null);
  if (!clauseId) return null;
- const docColor = DOC_COLOR[data?.doc || kbClause?.doc] || "#c8d0dc";
+ const docColor = DOC_COLOR[data?.doc || kbClause?.doc] || "#cbd5e1";
  const ktRisk = data?.kt_risk || kbClause?.kt_risk || data?.context || "";
 
  useEffect(() => {
@@ -3522,7 +3522,7 @@ return;
  REG: { name:"사내 규정", short:"내규", color:"#34d399", desc:"KT 내부 규정 (하도급, 회계, 정보보호 등)" },
  AMD: { name:"계약 변경서", short:"Amendment", color:"#fb923c", desc:"기존 계약 조항의 수정·추가·삭제" },
  NEW: { name:"신규 계약서", short:"신규", color:"#e879f9", desc:"신규 체결 계약" },
- OTHER: { name:"기타 문서", short:"기타", color:"#8899aa", desc:"기타 참고 문서" },
+ OTHER: { name:"기타 문서", short:"기타", color:"#94a3b8", desc:"기타 참고 문서" },
  };
 
  const [showUploadPanel, setShowUploadPanel] = useState(false);
@@ -3547,9 +3547,9 @@ return;
  { label:'충돌 탐지', value: conflicts.length+'건', sub: highConflicts > 0 ? `HIGH ${highConflicts}건` : '양호', color: highConflicts > 0 ? '#ff2d20' : '#10b981' },
  ].map((s,i) => (
  <div key={i} style={{background:'#0f0f1a', borderRadius:5, padding:'8px 10px', border:'1px solid #1e2030'}}>
- <div style={{fontSize:9, color:'#475569', marginBottom:3}}>{s.label}</div>
+ <div style={{fontSize:11, color:'#475569', marginBottom:3}}>{s.label}</div>
  <div style={{fontSize:13, fontWeight:700, color:s.color, marginBottom:2}}>{s.value}</div>
- <div style={{fontSize:8, color:'#6677aa'}}>{s.sub}</div>
+ <div style={{fontSize:10, color:'#6677aa'}}>{s.sub}</div>
  </div>
  ))}
  </div>
@@ -3567,14 +3567,14 @@ return;
  {showUploadPanel && (
  <div style={{marginTop:10}}>
  {/* 문서 종류 선택 */}
- <div style={{fontSize:9, color:'#6677aa', marginBottom:6}}>문서 종류 선택</div>
+ <div style={{fontSize:11, color:'#6677aa', marginBottom:6}}>문서 종류 선택</div>
  <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:4, marginBottom:10}}>
  {Object.entries(DOC_TYPE_KO).map(([k,v]) => (
  <button key={k} onClick={()=>setNewDocType(k)}
  style={{padding:'6px 8px', borderRadius:4, border:`1px solid ${newDocType===k?v.color+'88':'#1e2030'}`,
  background:newDocType===k?v.color+'15':'#0f0f1a', cursor:'pointer', fontFamily:'inherit', textAlign:'left'}}>
  <div style={{fontSize:10, fontWeight:700, color:newDocType===k?v.color:'#8899aa'}}>{v.short}</div>
- <div style={{fontSize:8, color:'#475569', marginTop:1, lineHeight:1.3}}>{v.desc}</div>
+ <div style={{fontSize:10, color:'#475569', marginTop:1, lineHeight:1.3}}>{v.desc}</div>
  </button>
  ))}
  </div>
@@ -3594,7 +3594,7 @@ return;
  <div style={{fontSize:11, color:'#8899aa', marginBottom:2}}>
  파일을 여기에 끌어다 놓거나 클릭
  </div>
- <div style={{fontSize:9, color:'#475569'}}>PDF · DOCX · TXT 지원</div>
+ <div style={{fontSize:11, color:'#475569'}}>PDF · DOCX · TXT 지원</div>
  </>
  }
  </div>
@@ -3604,8 +3604,8 @@ return;
  <div style={{marginTop:6, padding:'6px 8px', borderRadius:4,
  background:statusColor(uploadStatus.status)+'10',
  border:`1px solid ${statusColor(uploadStatus.status)}33`}}>
- <div style={{fontSize:9, color:statusColor(uploadStatus.status), fontWeight:600, marginBottom:1}}>{uploadStatus.name}</div>
- <div style={{fontSize:9, color:statusColor(uploadStatus.status)}}>{uploadStatus.msg}</div>
+ <div style={{fontSize:11, color:statusColor(uploadStatus.status), fontWeight:600, marginBottom:1}}>{uploadStatus.name}</div>
+ <div style={{fontSize:11, color:statusColor(uploadStatus.status)}}>{uploadStatus.msg}</div>
  </div>
  )}
  </div>
@@ -3621,7 +3621,7 @@ return;
  {(checking || uploading) ? '⏳ 충돌 검토 중...' : pendingAmendment ? '⏸ 검토 승인 후 실행 가능' : '🔍 조항 간 충돌 재검토'}
  </button>
  {conflictStatus && (
- <div style={{marginTop:4, fontSize:9, color:statusColor(conflictStatus.status), textAlign:'center'}}>
+ <div style={{marginTop:4, fontSize:11, color:statusColor(conflictStatus.status), textAlign:'center'}}>
  {conflictStatus.msg}
  </div>
  )}
@@ -3651,7 +3651,7 @@ return;
  ];
  return (
  <>
- <div style={{fontSize:9, color:'#475569', marginBottom:8, display:'flex', alignItems:'center', gap:6}}>
+ <div style={{fontSize:11, color:'#475569', marginBottom:8, display:'flex', alignItems:'center', gap:6}}>
  기본 제공 문서
  <span style={{background:'#1e2030', padding:'1px 6px', borderRadius:2}}>내장</span>
  </div>
@@ -3667,12 +3667,12 @@ return;
  border:`1px solid ${isSelected?bd.color+'55':'#1e2030'}`,
  background:isSelected?bd.color+'0a':'#0f0f1a'}}>
  <div style={{display:'flex', alignItems:'center', gap:6, marginBottom:2}}>
- <span style={{fontSize:9, fontWeight:700, color:bd.color,
+ <span style={{fontSize:11, fontWeight:700, color:bd.color,
  background:bd.color+'18', padding:'1px 5px', borderRadius:2}}>내장</span>
  <span style={{fontSize:10, color:'#c8d0dc', flex:1, fontWeight:500}}>{bd.label}</span>
- <span style={{fontSize:9, color:'#475569'}}>{groupClauses.length}개</span>
+ <span style={{fontSize:11, color:'#475569'}}>{groupClauses.length}개</span>
  </div>
- <div style={{fontSize:9, color:'#475569'}}>{bd.desc}</div>
+ <div style={{fontSize:11, color:'#475569'}}>{bd.desc}</div>
  </div>
  );
  })}
@@ -3683,7 +3683,7 @@ return;
  {/* 업로드한 문서 */}
  {docs.length > 0 && (
  <>
- <div style={{fontSize:9, color:'#475569', margin:'14px 0 8px', display:'flex', alignItems:'center', gap:6}}>
+ <div style={{fontSize:11, color:'#475569', margin:'14px 0 8px', display:'flex', alignItems:'center', gap:6}}>
  업로드된 문서
  <span style={{background:'#1e2030', padding:'1px 6px', borderRadius:2}}>{docs.length}건</span>
  </div>
@@ -3697,7 +3697,7 @@ return;
  style={{marginBottom:5, borderRadius:5, border:`1px solid ${isSelected?tc.color+'44':'#1e2030'}`,
  background:isSelected?tc.color+'08':'#0f0f1a', cursor:'pointer', padding:'8px 10px'}}>
  <div style={{display:'flex', alignItems:'center', gap:6, marginBottom:2}}>
- <span style={{fontSize:9, fontWeight:700, color:tc.color,
+ <span style={{fontSize:11, fontWeight:700, color:tc.color,
  background:tc.color+'18', padding:'1px 5px', borderRadius:2}}>{tc.short}</span>
  <span style={{fontSize:10, color:'#c8d0dc', flex:1, overflow:'hidden',
  textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{d.fileName}</span>
@@ -3705,7 +3705,7 @@ return;
  style={{background:'none',border:'none',color:'#475569',cursor:'pointer',
  fontSize:14,padding:'0 2px',fontFamily:'inherit',lineHeight:1}}>×</button>
  </div>
- <div style={{display:'flex', gap:8, fontSize:9, color:'#475569'}}>
+ <div style={{display:'flex', gap:8, fontSize:11, color:'#475569'}}>
  <span>조항 {dClauses.length}개</span>
  <span>{fmt(d.fileSize)}</span>
  {d.isAmendment && <span style={{color:'#fb923c'}}>⚡ 변경서</span>}
@@ -3714,7 +3714,7 @@ return;
  );
  })}
  <button onClick={resetToOriginal}
- style={{width:'100%', marginTop:8, fontSize:9, color:'#475569', background:'none',
+ style={{width:'100%', marginTop:8, fontSize:11, color:'#475569', background:'none',
  border:'1px solid #1e2030', borderRadius:3, padding:'5px', cursor:'pointer', fontFamily:'inherit'}}>
  업로드 전체 초기화
  </button>
@@ -3743,12 +3743,12 @@ return;
  background:'transparent', color:rightView===k?'#60a5fa':'#6677aa',
  cursor:'pointer', fontFamily:'inherit'}}>
  {label}
- <span style={{marginLeft:5, fontSize:9, color:'#475569'}}>{count}개</span>
+ <span style={{marginLeft:5, fontSize:11, color:'#475569'}}>{count}개</span>
  </button>
  ))}
  {selectedDoc && (
  <span onClick={()=>setSelectedDoc(null)}
- style={{marginLeft:'auto', alignSelf:'center', fontSize:9, color:'#6677aa', cursor:'pointer', padding:'4px 8px',
+ style={{marginLeft:'auto', alignSelf:'center', fontSize:11, color:'#6677aa', cursor:'pointer', padding:'4px 8px',
  background:'#0f0f1a', borderRadius:3, border:'1px solid #1e2030'}}>
  × 전체 보기
  </span>
@@ -3773,27 +3773,27 @@ return;
  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
   <input type='checkbox' checked={ec._selected!==false} onChange={()=>togglePendingRow(ec._reviewId || (ec.id+idx))} />
   <div style={{fontSize:10,color:'#60a5fa',fontWeight:700}}>{ec.id || 'ID 없음'} · {ec._changeType || '수정'} · {ec.topic || '주제 없음'}</div>
-  {ec._suspicious && <span style={{fontSize:9,color:'#fca5a5',marginLeft:'auto'}}>검토주의</span>}
+  {ec._suspicious && <span style={{fontSize:11,color:'#fca5a5',marginLeft:'auto'}}>검토주의</span>}
  </div>
- <div style={{fontSize:9,color:'#94a3b8',lineHeight:1.5}}>이전: {(ec._prevCore || '(기존 없음)').slice(0, 140)}</div>
+ <div style={{fontSize:12,color:'#94a3b8',lineHeight:1.65}}>이전: {(ec._prevCore || '(기존 없음)').slice(0, 140)}</div>
  <div style={{fontSize:10,color:'#9aaabb',lineHeight:1.55,marginTop:2}}>변경: {(ec.core || '').slice(0, 180)}</div>
  <div style={{marginTop:6,display:'flex',justifyContent:'flex-end'}}>
   <button onClick={()=>togglePendingExpand(ec._reviewId || (ec.id+idx))}
-  style={{padding:'3px 8px',borderRadius:4,border:'1px solid #334155',background:'#111827',color:'#cbd5e1',fontSize:9,cursor:'pointer',fontFamily:'inherit'}}>
+  style={{padding:'3px 8px',borderRadius:4,border:'1px solid #334155',background:'#111827',color:'#cbd5e1',fontSize:11,cursor:'pointer',fontFamily:'inherit'}}>
   {expandedPendingRows[ec._reviewId || (ec.id+idx)] ? '전문 비교 닫기' : '전문 비교 보기'}
   </button>
  </div>
  {expandedPendingRows[ec._reviewId || (ec.id+idx)] && (
  <div style={{marginTop:6,paddingTop:6,borderTop:'1px solid #1e2030',display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
   <div style={{background:'#0b1220',border:'1px solid #1e293b',borderRadius:4,padding:'6px 7px'}}>
-  <div style={{fontSize:9,color:'#93c5fd',fontWeight:700,marginBottom:4}}>변경 전 전문</div>
-  <div style={{fontSize:9,color:'#9fb2c8',lineHeight:1.55,whiteSpace:'pre-wrap',maxHeight:160,overflowY:'auto'}}>
+  <div style={{fontSize:11,color:'#93c5fd',fontWeight:700,marginBottom:4}}>변경 전 전문</div>
+  <div style={{fontSize:11,color:'#9fb2c8',lineHeight:1.55,whiteSpace:'pre-wrap',maxHeight:160,overflowY:'auto'}}>
    {CLAUSE_FULLTEXT[ec.id]?.text || ec._prevCore || '(기존 전문 없음)'}
   </div>
   </div>
   <div style={{background:'#102014',border:'1px solid #1f3b2f',borderRadius:4,padding:'6px 7px'}}>
-  <div style={{fontSize:9,color:'#86efac',fontWeight:700,marginBottom:4}}>변경 후 전문</div>
-  <div style={{fontSize:9,color:'#b7d5bf',lineHeight:1.55,whiteSpace:'pre-wrap',maxHeight:160,overflowY:'auto'}}>
+  <div style={{fontSize:11,color:'#86efac',fontWeight:700,marginBottom:4}}>변경 후 전문</div>
+  <div style={{fontSize:11,color:'#b7d5bf',lineHeight:1.55,whiteSpace:'pre-wrap',maxHeight:160,overflowY:'auto'}}>
    {ec.text || ec.core || '(변경 전문 없음)'}
   </div>
   </div>
@@ -3842,9 +3842,9 @@ return;
  <div key={cf.id||i} style={{marginBottom:8, padding:'10px 12px', borderRadius:5,
  border:`1px solid ${rc}33`, background:rc+'08'}}>
  <div style={{display:'flex', alignItems:'center', gap:6, marginBottom:5}}>
- <span style={{fontSize:9, fontWeight:700, color:rc, background:rc+'18', padding:'1px 6px', borderRadius:2}}>{linkifyClauses(cf.id, onOpenClause)}</span>
+ <span style={{fontSize:11, fontWeight:700, color:rc, background:rc+'18', padding:'1px 6px', borderRadius:2}}>{linkifyClauses(cf.id, onOpenClause)}</span>
  <span style={{fontSize:10, color:'#c8d0dc', fontWeight:600, flex:1}}>{cf.topic}</span>
- <span style={{fontSize:9, fontWeight:700, color:rc,
+ <span style={{fontSize:11, fontWeight:700, color:rc,
  background:rc+'18', padding:'2px 7px', borderRadius:3}}>{cf.risk}</span>
  </div>
  <div style={{fontSize:10, color:'#cbd5e1', lineHeight:1.6, fontWeight:600}}>{linkifyClauses(cf.summary, onOpenClause)}</div>
@@ -3867,8 +3867,8 @@ return;
  <div style={{marginTop:6, display:'grid', gridTemplateColumns:'1fr 1fr', gap:6}}>
   {pairClauses.map((pc, pidx) => (
   <div key={(pc.id || pidx) + '-' + pidx} style={{background:'#0b1220', border:'1px solid #1e293b', borderRadius:4, padding:'5px 6px'}}>
-   <div style={{fontSize:9, color:'#93c5fd', fontWeight:700, marginBottom:2}}>{linkifyClauses(pc.id || '', onOpenClause)} · {pc.topic || '주제 없음'}</div>
-   <div style={{fontSize:9, color:'#9fb2c8', lineHeight:1.5}}>{linkifyClauses((pc.core || '').slice(0, 180), onOpenClause)}</div>
+   <div style={{fontSize:11, color:'#93c5fd', fontWeight:700, marginBottom:2}}>{linkifyClauses(pc.id || '', onOpenClause)} · {pc.topic || '주제 없음'}</div>
+   <div style={{fontSize:11, color:'#9fb2c8', lineHeight:1.5}}>{linkifyClauses((pc.core || '').slice(0, 180), onOpenClause)}</div>
   </div>
   ))}
  </div>
@@ -3876,7 +3876,7 @@ return;
  {cf.clauseIds && cf.clauseIds.length > 0 && (
  <div style={{marginTop:5, display:'flex', gap:4, flexWrap:'wrap'}}>
  {cf.clauseIds.map(id=>(
- <span key={id} style={{fontSize:8, color:'#60a5fa', background:'#60a5fa18',
+ <span key={id} style={{fontSize:10, color:'#60a5fa', background:'#60a5fa18',
  padding:'1px 5px', borderRadius:2}}>{linkifyClauses(id, onOpenClause)}</span>
  ))}
  </div>
@@ -3905,7 +3905,7 @@ return;
  border:`1px solid ${c._amended?'#fb923c33':c._new?'#10b98133':'#1a1a2e'}`,
  background:c._amended?'#120a04':c._new?'#04120a':'#0a0a14'}}>
  <div style={{display:'flex', alignItems:'center', gap:6, marginBottom:4}}>
- <span style={{fontSize:9, fontWeight:700, color:dc, background:dc+'18',
+ <span style={{fontSize:11, fontWeight:700, color:dc, background:dc+'18',
  padding:'1px 6px', borderRadius:2}}>{linkifyClauses(c.id, onOpenClause)}</span>
  <span style={{fontSize:10, color:'#c8d0dc', fontWeight:600, flex:1}}>{c.topic}</span>
  <button
@@ -3914,20 +3914,20 @@ return;
  >
  원문 보기
  </button>
- {c._amended && <span style={{fontSize:8, color:'#fb923c', background:'#fb923c18',
+ {c._amended && <span style={{fontSize:10, color:'#fb923c', background:'#fb923c18',
  padding:'1px 5px', borderRadius:2, fontWeight:700}}>수정됨</span>}
- {c._new && <span style={{fontSize:8, color:'#10b981', background:'#10b98118',
+ {c._new && <span style={{fontSize:10, color:'#10b981', background:'#10b98118',
  padding:'1px 5px', borderRadius:2, fontWeight:700}}>신규</span>}
  </div>
- <div style={{fontSize:10, color:'#9aaabb', lineHeight:1.6}}>{linkifyClauses(c.core, onOpenClause)}</div>
+ <div style={{fontSize:12, color:'#94a3b8', lineHeight:1.7}}>{linkifyClauses(c.core, onOpenClause)}</div>
  {c._prevCore && (
- <div style={{marginTop:5, fontSize:9, color:'#475569', textDecoration:'line-through',
+ <div style={{marginTop:5, fontSize:11, color:'#475569', textDecoration:'line-through',
  borderTop:'1px solid #1e2030', paddingTop:4}}>
  이전: {linkifyClauses(c._prevCore, onOpenClause)}
  </div>
  )}
  {c._amendedBy && (
- <div style={{marginTop:3, fontSize:8, color:'#fb923c66'}}>변경 출처: {c._amendedBy}</div>
+ <div style={{marginTop:3, fontSize:10, color:'#fb923c66'}}>변경 출처: {c._amendedBy}</div>
  )}
  </div>
  );
@@ -4157,17 +4157,17 @@ function AmendmentManager({ onAmendmentsChange }) {
  alert("모든 Amendment가 초기화되었습니다. 페이지를 새로고침하면 원본 KB로 복원됩니다.");
  };
 
- const typeColor = { Amendment:"#a78bfa", NewContract:"#60a5fa", OrderForm:"#10b981", Other:"#8899aa" };
+ const typeColor = { Amendment:"#a78bfa", NewContract:"#60a5fa", OrderForm:"#10b981", Other:"#94a3b8" };
  const impColor = { HIGH:"#ff2d20", MEDIUM:"#f59e0b", LOW:"#10b981" };
  const chgColor = { 수정:"#60a5fa", 삭제:"#ff2d20", 추가:"#10b981", 대체:"#f59e0b" };
  const totalPatches = patchHistory.reduce((s, h) => s + (h.patches?.length||0), 0);
 
  return (
- <div style={{border:"1px solid #1e2030",borderRadius:6,overflow:"hidden",marginBottom:8}}>
+ <div style={{border:"1px solid #334155",borderRadius:6,overflow:"hidden",marginBottom:8}}>
  <div onClick={()=>setExpanded(!expanded)}
- style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#0a0a14",cursor:"pointer",userSelect:"none"}}>
- <div style={{width:5,height:5,borderRadius:"50%",background:patchHistory.length>0?"#a78bfa":"#1e2030"}}/>
- <span style={{fontSize:11,color:patchHistory.length>0?"#c8d0dc":"#8899aa",flex:1}}>
+ style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#020617",cursor:"pointer",userSelect:"none"}}>
+ <div style={{width:5,height:5,borderRadius:"50%",background:patchHistory.length>0?"#a78bfa":"#334155"}}/>
+ <span style={{fontSize:11,color:patchHistory.length>0?"#cbd5e1":"#94a3b8",flex:1}}>
  {"Amendment / 계약 변경"}
  {patchHistory.length > 0 && (
  <span style={{fontSize:10,color:"#a78bfa",marginLeft:6}}>
@@ -4175,25 +4175,25 @@ function AmendmentManager({ onAmendmentsChange }) {
  </span>
  )}
  </span>
- <span style={{fontSize:10,color:"#6677aa"}}>{expanded?"▲":"▼"}</span>
+ <span style={{fontSize:10,color:"#64748b"}}>{expanded?"▲":"▼"}</span>
  </div>
 
  {expanded && (
- <div style={{background:"#07070f",borderTop:"1px solid #1a1a2e"}}>
+ <div style={{background:"#07070f",borderTop:"1px solid #334155"}}>
  {/* 업로드 영역 */}
  <div style={{padding:"10px 12px",borderBottom:"1px solid #0f0f20"}}>
  <div
  onClick={()=>!parsing&&fileRef.current?.click()}
  onDragOver={e=>{e.preventDefault();e.currentTarget.style.borderColor="#a78bfa";}}
- onDragLeave={e=>{e.currentTarget.style.borderColor="#1e2030";}}
- onDrop={e=>{e.preventDefault();e.currentTarget.style.borderColor="#1e2030";if(!parsing)Array.from(e.dataTransfer.files).forEach(parseAndApply);}}
+ onDragLeave={e=>{e.currentTarget.style.borderColor="#334155";}}
+ onDrop={e=>{e.preventDefault();e.currentTarget.style.borderColor="#334155";if(!parsing)Array.from(e.dataTransfer.files).forEach(parseAndApply);}}
  style={{border:"1px dashed #1e2030",borderRadius:5,padding:"12px",textAlign:"center",cursor:parsing?"not-allowed":"pointer",transition:"border-color 0.15s",opacity:parsing?0.6:1}}
  >
  {parsing
  ? <div style={{fontSize:11,color:"#a78bfa"}}>{"⏳ AI가 조항 변경사항을 추출하는 중..."}</div>
  : <>
- <div style={{fontSize:11,color:"#8899aa",marginBottom:3}}>{"PDF · DOCX · TXT"}</div>
- <div style={{fontSize:10,color:"#6677aa"}}>{"업로드 시 AI가 자동으로 KB 조항을 업데이트하고 영구 저장합니다"}</div>
+ <div style={{fontSize:11,color:"#94a3b8",marginBottom:3}}>{"PDF · DOCX · TXT"}</div>
+ <div style={{fontSize:10,color:"#64748b"}}>{"업로드 시 AI가 자동으로 KB 조항을 업데이트하고 영구 저장합니다"}</div>
  </>
  }
  </div>
@@ -4203,21 +4203,21 @@ function AmendmentManager({ onAmendmentsChange }) {
  <div style={{marginTop:6,padding:"5px 8px",borderRadius:4,
  background:parseStatus.status==="ok"?"#0a2a1a":parseStatus.status==="error"?"#2a0a0a":parseStatus.status==="warn"?"#1a1a08":"#0f1525",
  border:`1px solid ${parseStatus.status==="ok"?"#10b98133":parseStatus.status==="error"?"#ff2d2033":parseStatus.status==="warn"?"#f59e0b33":"#60a5fa33"}`}}>
- <span style={{fontSize:9,color:parseStatus.status==="ok"?"#10b981":parseStatus.status==="error"?"#ff2d20":parseStatus.status==="warn"?"#f59e0b":"#60a5fa"}}>
+ <span style={{fontSize:11,color:parseStatus.status==="ok"?"#10b981":parseStatus.status==="error"?"#ff2d20":parseStatus.status==="warn"?"#f59e0b":"#60a5fa"}}>
  {parseStatus.status==="ok"?"✓":parseStatus.status==="error"?"✗":parseStatus.status==="warn"?"⚠":"⏳"}{" "}{parseStatus.name}: {parseStatus.msg}
  </span>
  {parseStatus.status === "error" && parseStatus.rawResponse && (
  <details style={{marginTop:6}}>
-  <summary style={{fontSize:9,color:"#fca5a5",cursor:"pointer"}}>LLM 원본 응답 보기</summary>
-  <pre style={{marginTop:6,whiteSpace:"pre-wrap",wordBreak:"break-word",fontSize:9,color:"#fecaca",background:"#120707",border:"1px solid #7f1d1d66",borderRadius:4,padding:"6px",maxHeight:160,overflowY:"auto"}}>{parseStatus.rawResponse}</pre>
+  <summary style={{fontSize:11,color:"#fca5a5",cursor:"pointer"}}>LLM 원본 응답 보기</summary>
+  <pre style={{marginTop:6,whiteSpace:"pre-wrap",wordBreak:"break-word",fontSize:11,color:"#fecaca",background:"#120707",border:"1px solid #7f1d1d66",borderRadius:4,padding:"6px",maxHeight:160,overflowY:"auto"}}>{parseStatus.rawResponse}</pre>
  </details>
  )}
  {parseStatus.status === "ok" && Array.isArray(parseStatus.clauseIds) && parseStatus.clauseIds.length > 0 && (
  <details style={{marginTop:6}}>
-  <summary style={{fontSize:9,color:"#86efac",cursor:"pointer"}}>추출된 조항 ID 보기 ({parseStatus.clauseIds.length}개)</summary>
+  <summary style={{fontSize:11,color:"#86efac",cursor:"pointer"}}>추출된 조항 ID 보기 ({parseStatus.clauseIds.length}개)</summary>
   <div style={{marginTop:6,display:"flex",flexWrap:"wrap",gap:4}}>
   {parseStatus.clauseIds.map((id, idx) => (
-   <span key={id + "-" + idx} style={{fontSize:8,color:"#86efac",background:"#052e16",border:"1px solid #16653466",padding:"1px 5px",borderRadius:3}}>{id}</span>
+   <span key={id + "-" + idx} style={{fontSize:10,color:"#86efac",background:"#052e16",border:"1px solid #16653466",padding:"1px 5px",borderRadius:3}}>{id}</span>
   ))}
   </div>
  </details>
@@ -4228,7 +4228,7 @@ function AmendmentManager({ onAmendmentsChange }) {
 
  {/* 패치 이력 */}
  {patchHistory.length === 0
- ? <div style={{padding:"14px",fontSize:10,color:"#6677aa",textAlign:"center",lineHeight:1.7}}>
+ ? <div style={{padding:"14px",fontSize:10,color:"#64748b",textAlign:"center",lineHeight:1.7}}>
  {"Amendment를 업로드하면 AI가 조항 변경사항을 추출하여"}<br/>
  {"CONTRACT_KB를 직접 업데이트하고 storage에 영구 저장합니다"}
  </div>
@@ -4236,23 +4236,23 @@ function AmendmentManager({ onAmendmentsChange }) {
  {patchHistory.map(h => (
  <div key={h.id} style={{padding:"10px 12px",borderBottom:"1px solid #0f0f20"}}>
  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
- <span style={{fontSize:9,fontWeight:700,color:typeColor[h.docType]||"#8899aa",background:(typeColor[h.docType]||"#8899aa")+"18",padding:"1px 6px",borderRadius:2}}>{h.docType}</span>
- <span style={{fontSize:10,color:"#c8d0dc",fontWeight:600,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.fileName}</span>
- {h.effectiveDate && <span style={{fontSize:9,color:"#6677aa",whiteSpace:"nowrap"}}>{h.effectiveDate}</span>}
- <button onClick={()=>removeEntry(h.id)} style={{background:"none",border:"none",color:"#6677aa",cursor:"pointer",fontSize:12,padding:"0 2px",fontFamily:"inherit"}}>{"×"}</button>
+ <span style={{fontSize:11,fontWeight:700,color:typeColor[h.docType]||"#94a3b8",background:(typeColor[h.docType]||"#94a3b8")+"18",padding:"1px 6px",borderRadius:2}}>{h.docType}</span>
+ <span style={{fontSize:10,color:"#cbd5e1",fontWeight:600,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.fileName}</span>
+ {h.effectiveDate && <span style={{fontSize:11,color:"#64748b",whiteSpace:"nowrap"}}>{h.effectiveDate}</span>}
+ <button onClick={()=>removeEntry(h.id)} style={{background:"none",border:"none",color:"#64748b",cursor:"pointer",fontSize:12,padding:"0 2px",fontFamily:"inherit"}}>{"×"}</button>
  </div>
- <div style={{fontSize:10,color:"#9aaabb",marginBottom:5,lineHeight:1.5}}>{h.summary}</div>
+ <div style={{fontSize:10,color:"#94a3b8",marginBottom:5,lineHeight:1.5}}>{h.summary}</div>
  {(h.patches||[]).map((p,i)=>(
- <div key={i} style={{display:"flex",gap:5,alignItems:"flex-start",marginBottom:3,padding:"4px 6px",background:"#0a0a14",borderRadius:3,borderLeft:`2px solid ${chgColor[p.changeType]||"#8899aa"}`}}>
- <span style={{fontSize:9,fontWeight:700,color:"#60a5fa",whiteSpace:"nowrap",minWidth:90}}>{p.clauseId}</span>
- <span style={{fontSize:9,color:chgColor[p.changeType]||"#8899aa",whiteSpace:"nowrap",minWidth:28}}>{p.changeType}</span>
- <span style={{fontSize:9,color:"#9aaabb",lineHeight:1.4}}>{p.newCore||p.newTopic||""}</span>
+ <div key={i} style={{display:"flex",gap:5,alignItems:"flex-start",marginBottom:3,padding:"4px 6px",background:"#020617",borderRadius:3,borderLeft:`2px solid ${chgColor[p.changeType]||"#94a3b8"}`}}>
+ <span style={{fontSize:11,fontWeight:700,color:"#60a5fa",whiteSpace:"nowrap",minWidth:90}}>{p.clauseId}</span>
+ <span style={{fontSize:11,color:chgColor[p.changeType]||"#94a3b8",whiteSpace:"nowrap",minWidth:28}}>{p.changeType}</span>
+ <span style={{fontSize:12,color:"#94a3b8",lineHeight:1.65}}>{p.newCore||p.newTopic||""}</span>
  </div>
  ))}
  </div>
  ))}
  <div style={{padding:"8px 12px"}}>
- <button onClick={clearAll} style={{fontSize:10,color:"#6677aa",background:"none",border:"1px solid #1e2030",borderRadius:3,padding:"3px 10px",cursor:"pointer",fontFamily:"inherit",width:"100%"}}>
+ <button onClick={clearAll} style={{fontSize:10,color:"#64748b",background:"none",border:"1px solid #334155",borderRadius:3,padding:"3px 10px",cursor:"pointer",fontFamily:"inherit",width:"100%"}}>
  {"전체 초기화 (원본 KB 복원)"}
  </button>
  </div>
@@ -4708,7 +4708,7 @@ function ClauseTimelineTab({ onOpenClause }) {
  const chgColor = { MODIFY:"#60a5fa", DELETE:"#ff2d20", ADD:"#10b981", REPLACE:"#f59e0b",
  수정:"#60a5fa", 삭제:"#ff2d20", 추가:"#10b981", 대체:"#f59e0b" };
  const chgLabel = { MODIFY:"수정", DELETE:"삭제", ADD:"추가", REPLACE:"대체" };
- const typeColor = { Amendment:"#a78bfa", NewContract:"#60a5fa", OrderForm:"#10b981", Other:"#8899aa" };
+ const typeColor = { Amendment:"#a78bfa", NewContract:"#60a5fa", OrderForm:"#10b981", Other:"#94a3b8" };
 
  const toggleAmd = (id) => setExpandedAmds(p => ({...p, [id]: !p[id]}));
 
@@ -4729,26 +4729,26 @@ function ClauseTimelineTab({ onOpenClause }) {
  <div style={{display:"grid", gridTemplateColumns:"260px 1fr", height:"100%", overflow:"hidden"}}>
 
  {/* -- 왼쪽: Amendment 목록 + 조항 필터 -- */}
- <div style={{borderRight:"1px solid #1a1a2e", display:"flex", flexDirection:"column",
- overflow:"hidden", background:"#0a0a14"}}>
+ <div style={{borderRight:"1px solid #334155", display:"flex", flexDirection:"column",
+ overflow:"hidden", background:"#020617"}}>
 
  {/* 검색 */}
- <div style={{padding:"12px 14px", borderBottom:"1px solid #1a1a2e"}}>
+ <div style={{padding:"12px 14px", borderBottom:"1px solid #334155"}}>
  <input value={search} onChange={e=>setSearch(e.target.value)}
  placeholder="문서명·조항 ID·내용 검색..."
- style={{width:"100%", background:"#0f0f1a", border:"1px solid #1e2030", borderRadius:4,
+ style={{width:"100%", background:"#1e293b", border:"1px solid #334155", borderRadius:4,
  padding:"6px 9px", fontSize:10, color:"#e2e8f0", fontFamily:"inherit",
  outline:"none", boxSizing:"border-box"}}/>
  </div>
 
  {/* 뷰 전환 */}
- <div style={{display:"flex", borderBottom:"1px solid #1a1a2e"}}>
+ <div style={{display:"flex", borderBottom:"1px solid #334155"}}>
  {[["timeline","타임라인"],["clause","조항별"]].map(([k,label])=>(
  <button key={k} onClick={()=>{ setViewMode(k); setSelectedId(null); }}
  style={{flex:1, padding:"8px", fontSize:10, fontWeight:600, border:"none",
  background:"transparent", cursor:"pointer", fontFamily:"inherit",
  borderBottom:viewMode===k?"2px solid #60a5fa":"2px solid transparent",
- color:viewMode===k?"#60a5fa":"#6677aa"}}>
+ color:viewMode===k?"#60a5fa":"#64748b"}}>
  {label}
  </button>
  ))}
@@ -4758,45 +4758,45 @@ function ClauseTimelineTab({ onOpenClause }) {
 
  {/* 타임라인 모드: Amendment 목록 */}
  {viewMode==="timeline" && filtered.map(h => {
- const tc = typeColor[h.docType]||"#8899aa";
+ const tc = typeColor[h.docType]||"#94a3b8";
  const isExp = expandedAmds[h.id];
  const patchCount = h.patches?.length||0;
  return (
  <div key={h.id} style={{marginBottom:6, borderRadius:5,
- border:`1px solid ${isExp?tc+"44":"#1e2030"}`,
- background:isExp?tc+"06":"#0f0f1a"}}>
+ border:`1px solid ${isExp?tc+"44":"#334155"}`,
+ background:isExp?tc+"06":"#1e293b"}}>
  <div onClick={()=>toggleAmd(h.id)}
  style={{padding:"9px 10px", cursor:"pointer"}}>
  <div style={{display:"flex", alignItems:"center", gap:5, marginBottom:3}}>
- <span style={{fontSize:9, fontWeight:700, color:tc,
+ <span style={{fontSize:11, fontWeight:700, color:tc,
  background:tc+"18", padding:"1px 5px", borderRadius:2}}>
  {h.docType}
  </span>
- <span style={{fontSize:8, color:"#475569", marginLeft:"auto"}}>
+ <span style={{fontSize:10, color:"#475569", marginLeft:"auto"}}>
  {h.effectiveDate || h.uploadedAt?.slice(0,10) || "날짜 미상"}
  </span>
  </div>
- <div style={{fontSize:10, color:"#c8d0dc", marginBottom:3,
+ <div style={{fontSize:10, color:"#cbd5e1", marginBottom:3,
  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
  {h.fileName}
  </div>
- <div style={{display:"flex", gap:6, fontSize:8, color:"#475569"}}>
+ <div style={{display:"flex", gap:6, fontSize:10, color:"#475569"}}>
  <span>조항 {patchCount}개 변경</span>
  {isExp ? <span style={{marginLeft:"auto"}}>▲</span> : <span style={{marginLeft:"auto"}}>▼</span>}
  </div>
  </div>
  {isExp && (
- <div style={{borderTop:"1px solid #1e2030", padding:"6px 10px"}}>
+ <div style={{borderTop:"1px solid #334155", padding:"6px 10px"}}>
  {(h.patches||[]).map((p,i)=>{
- const cc = chgColor[p.changeType]||"#8899aa";
+ const cc = chgColor[p.changeType]||"#94a3b8";
  return (
  <div key={i} style={{display:"flex", alignItems:"center", gap:5,
  padding:"3px 0", borderBottom:"1px solid #0f0f1a"}}>
- <span style={{fontSize:8, color:cc, background:cc+"15",
+ <span style={{fontSize:10, color:cc, background:cc+"15",
  padding:"1px 4px", borderRadius:2, whiteSpace:"nowrap"}}>
  {chgLabel[p.changeType]||p.changeType}
  </span>
- <span style={{fontSize:9, color:"#9aaabb"}}>{linkifyClauses(p.clauseId, onOpenClause)}</span>
+ <span style={{fontSize:11, color:"#94a3b8"}}>{linkifyClauses(p.clauseId, onOpenClause)}</span>
  </div>
  );
  })}
@@ -4809,28 +4809,28 @@ function ClauseTimelineTab({ onOpenClause }) {
  {/* 조항별 모드: 조항 ID 목록 */}
  {viewMode==="clause" && (
  <>
- <div style={{fontSize:9, color:"#475569", marginBottom:8, padding:"2px 2px"}}>
+ <div style={{fontSize:11, color:"#475569", marginBottom:8, padding:"2px 2px"}}>
  변경 이력이 있는 조항 ({allClauseIds.length}개)
  </div>
  {allClauseIds.filter(id=>!search.trim()||id.toLowerCase().includes(search.toLowerCase())).map(id => {
  const changes = patchHistory.filter(h=>(h.patches||[]).some(p=>p.clauseId===id));
  const lastChange = changes[0];
  const lastPatch = (lastChange?.patches||[]).find(p=>p.clauseId===id);
- const cc = chgColor[lastPatch?.changeType]||"#8899aa";
+ const cc = chgColor[lastPatch?.changeType]||"#94a3b8";
  return (
  <div key={id} onClick={()=>setSelectedId(selectedId===id?null:id)}
  style={{marginBottom:4, padding:"8px 10px", borderRadius:5, cursor:"pointer",
- border:`1px solid ${selectedId===id?"#60a5fa44":"#1e2030"}`,
- background:selectedId===id?"#0f1e35":"#0f0f1a"}}>
+ border:`1px solid ${selectedId===id?"#60a5fa44":"#334155"}`,
+ background:selectedId===id?"#0f1e35":"#1e293b"}}>
  <div style={{display:"flex", alignItems:"center", gap:6}}>
  <span style={{fontSize:10, fontWeight:700,
- color:selectedId===id?"#60a5fa":"#9aaabb"}}>{linkifyClauses(id, onOpenClause)}</span>
- <span style={{fontSize:8, color:cc, background:cc+"15",
+ color:selectedId===id?"#60a5fa":"#94a3b8"}}>{linkifyClauses(id, onOpenClause)}</span>
+ <span style={{fontSize:10, color:cc, background:cc+"15",
  padding:"1px 4px", borderRadius:2, marginLeft:"auto"}}>
  {chgLabel[lastPatch?.changeType]||lastPatch?.changeType}
  </span>
  </div>
- <div style={{fontSize:8, color:"#475569", marginTop:2}}>
+ <div style={{fontSize:10, color:"#475569", marginTop:2}}>
  변경 {changes.length}회 · 최종 {lastChange?.effectiveDate||lastChange?.uploadedAt?.slice(0,10)}
  </div>
  </div>
@@ -4847,9 +4847,9 @@ function ClauseTimelineTab({ onOpenClause }) {
  {/* 타임라인 모드 */}
  {viewMode==="timeline" && (
  <>
- <div style={{fontSize:11, color:"#6677aa", marginBottom:16, fontWeight:600}}>
+ <div style={{fontSize:11, color:"#64748b", marginBottom:16, fontWeight:600}}>
  전체 변경 타임라인 &nbsp;
- <span style={{fontSize:9, color:"#475569", fontWeight:400}}>
+ <span style={{fontSize:11, color:"#475569", fontWeight:400}}>
  {patchHistory.length}건의 문서 · 총 {patchHistory.reduce((s,h)=>s+(h.patches?.length||0),0)}개 조항 변경
  </span>
  </div>
@@ -4858,15 +4858,15 @@ function ClauseTimelineTab({ onOpenClause }) {
  <div style={{position:"relative", paddingLeft:24}}>
  {/* 수직선 */}
  <div style={{position:"absolute", left:8, top:0, bottom:0, width:1,
- background:"linear-gradient(#1e2030, #1e203000)"}}/>
+ background:"linear-gradient(#334155, #33415500)"}}/>
 
  {filtered.map((h, hi) => {
- const tc = typeColor[h.docType]||"#8899aa";
+ const tc = typeColor[h.docType]||"#94a3b8";
  return (
  <div key={h.id} style={{marginBottom:24, position:"relative"}}>
  {/* 노드 */}
  <div style={{position:"absolute", left:-20, top:4, width:10, height:10,
- borderRadius:"50%", background:tc, border:"2px solid #07070f",
+ borderRadius:"50%", background:tc, border:"2px solid #020617",
  boxShadow:`0 0 6px ${tc}88`}}/>
 
  {/* 헤더 */}
@@ -4876,47 +4876,47 @@ function ClauseTimelineTab({ onOpenClause }) {
  background:tc+"18", padding:"2px 7px", borderRadius:3}}>
  {h.docType}
  </span>
- <span style={{fontSize:11, color:"#c8d0dc", fontWeight:600}}>{h.fileName}</span>
- <span style={{fontSize:9, color:"#475569", marginLeft:"auto"}}>
+ <span style={{fontSize:11, color:"#cbd5e1", fontWeight:600}}>{h.fileName}</span>
+ <span style={{fontSize:11, color:"#475569", marginLeft:"auto"}}>
  {h.effectiveDate
  ? `발효일 ${h.effectiveDate}`
  : `업로드 ${h.uploadedAt?.slice(0,10)||""}`}
  </span>
  </div>
  {h.summary && (
- <div style={{fontSize:10, color:"#8899aa", lineHeight:1.5,
- padding:"6px 10px", background:"#0f0f1a",
- borderLeft:`2px solid ${tc}44`, borderRadius:"0 4px 4px 0"}}>
+ <div style={{fontSize:12, color:"#94a3b8", lineHeight:1.65,
+ padding:"8px 12px", background:"#1e293b",
+ borderLeft:`2px solid ${tc}55`, borderRadius:"0 5px 5px 0"}}>
  {linkifyClauses(h.summary, onOpenClause)}
  </div>
  )}
  </div>
 
  {/* 조항별 변경 카드 */}
- <div style={{display:"flex", flexDirection:"column", gap:6}}>
+ <div style={{display:"flex", flexDirection:"column", gap:8}}>
  {(h.patches||[]).map((p, pi) => {
- const cc = chgColor[p.changeType]||"#8899aa";
+ const cc = chgColor[p.changeType]||"#94a3b8";
  return (
- <div key={pi} style={{padding:"10px 12px", borderRadius:5,
- border:`1px solid ${cc}22`, background:cc+"06"}}>
- <div style={{display:"flex", alignItems:"center", gap:6, marginBottom:p.prevCore||p.newCore?6:0}}>
- <span style={{fontSize:9, fontWeight:700, color:cc,
- background:cc+"18", padding:"1px 6px", borderRadius:2}}>
+ <div key={pi} style={{padding:"12px 14px", borderRadius:6,
+ border:`1px solid ${cc}28`, background:cc+"06"}}>
+ <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:p.prevCore||p.newCore?8:0}}>
+ <span style={{fontSize:11, fontWeight:700, color:cc,
+ background:cc+"18", padding:"2px 8px", borderRadius:4}}>
  {chgLabel[p.changeType]||p.changeType}
  </span>
- <span style={{fontSize:11, fontWeight:700, color:"#c8d0dc"}}>{linkifyClauses(p.clauseId, onOpenClause)}</span>
- {p.topic && <span style={{fontSize:9, color:"#6677aa"}}>{p.topic}</span>}
+ <span style={{fontSize:12, fontWeight:700, color:"#e2e8f0"}}>{linkifyClauses(p.clauseId, onOpenClause)}</span>
+ {p.topic && <span style={{fontSize:12, color:"#64748b"}}>{p.topic}</span>}
  </div>
  {p.prevCore && (
- <div style={{fontSize:9, color:"#6677aa", lineHeight:1.5,
- textDecoration:"line-through", marginBottom:4,
- padding:"4px 8px", background:"#1a0808", borderRadius:3}}>
+ <div style={{fontSize:12, color:"#64748b", lineHeight:1.65,
+ textDecoration:"line-through", marginBottom:6,
+ padding:"6px 10px", background:"rgba(30,8,8,0.6)", borderRadius:4}}>
  이전: {linkifyClauses(p.prevCore, onOpenClause)}
  </div>
  )}
  {p.newCore && (
- <div style={{fontSize:9, color:"#9aaabb", lineHeight:1.5,
- padding:"4px 8px", background:"#0a0a14", borderRadius:3}}>
+ <div style={{fontSize:12, color:"#cbd5e1", lineHeight:1.65,
+ padding:"6px 10px", background:"#1e293b", borderRadius:4}}>
  변경: {linkifyClauses(p.newCore, onOpenClause)}
  </div>
  )}
@@ -4936,8 +4936,8 @@ function ClauseTimelineTab({ onOpenClause }) {
  selectedId ? (
  <>
  <div style={{marginBottom:16}}>
- <div style={{fontSize:13, fontWeight:700, color:"#c8d0dc", marginBottom:4}}>{linkifyClauses(selectedId, onOpenClause)}</div>
- <div style={{fontSize:10, color:"#6677aa"}}>
+ <div style={{fontSize:13, fontWeight:700, color:"#cbd5e1", marginBottom:4}}>{linkifyClauses(selectedId, onOpenClause)}</div>
+ <div style={{fontSize:10, color:"#64748b"}}>
  {clauseHistory.length}건의 문서에서 변경됨
  </div>
  </div>
@@ -4948,10 +4948,10 @@ function ClauseTimelineTab({ onOpenClause }) {
  return cur ? (
  <div style={{marginBottom:16, padding:"10px 12px",
  background:"#0a1a0a", border:"1px solid #10b98133", borderRadius:6}}>
- <div style={{fontSize:9, color:"#10b981", fontWeight:700, marginBottom:4}}>현재 상태</div>
- <div style={{fontSize:10, color:"#9aaabb", lineHeight:1.5}}>{linkifyClauses(cur.core, onOpenClause)}</div>
+ <div style={{fontSize:11, color:"#10b981", fontWeight:700, marginBottom:4}}>현재 상태</div>
+ <div style={{fontSize:12, color:"#94a3b8", lineHeight:1.7}}>{linkifyClauses(cur.core, onOpenClause)}</div>
  {cur._amended && (
- <div style={{fontSize:8, color:"#fb923c", marginTop:3}}>⚡ 수정된 조항</div>
+ <div style={{fontSize:10, color:"#fb923c", marginTop:3}}>⚡ 수정된 조항</div>
  )}
  </div>
  ) : null;
@@ -4959,36 +4959,36 @@ function ClauseTimelineTab({ onOpenClause }) {
 
  {/* 변경 타임라인 (최신 → 과거) */}
  <div style={{position:"relative", paddingLeft:20}}>
- <div style={{position:"absolute", left:6, top:0, bottom:0, width:1, background:"#1e2030"}}/>
+ <div style={{position:"absolute", left:6, top:0, bottom:0, width:1, background:"#334155"}}/>
  {clauseHistory.map((h, hi) => {
  const p = (h.patches||[])[0];
  if (!p) return null;
- const cc = chgColor[p.changeType]||"#8899aa";
- const tc = typeColor[h.docType]||"#8899aa";
+ const cc = chgColor[p.changeType]||"#94a3b8";
+ const tc = typeColor[h.docType]||"#94a3b8";
  return (
  <div key={h.id} style={{marginBottom:16, position:"relative"}}>
  <div style={{position:"absolute", left:-16, top:3, width:8, height:8,
- borderRadius:"50%", background:cc, border:"2px solid #07070f"}}/>
+ borderRadius:"50%", background:cc, border:"2px solid #020617"}}/>
  <div style={{marginBottom:4, display:"flex", alignItems:"center", gap:6}}>
- <span style={{fontSize:8, fontWeight:700, color:cc,
+ <span style={{fontSize:10, fontWeight:700, color:cc,
  background:cc+"18", padding:"1px 5px", borderRadius:2}}>
  {chgLabel[p.changeType]||p.changeType}
  </span>
- <span style={{fontSize:9, color:tc}}>{h.fileName}</span>
- <span style={{fontSize:8, color:"#475569", marginLeft:"auto"}}>
+ <span style={{fontSize:11, color:tc}}>{h.fileName}</span>
+ <span style={{fontSize:10, color:"#475569", marginLeft:"auto"}}>
  {h.effectiveDate||h.uploadedAt?.slice(0,10)}
  </span>
  </div>
  {p.prevCore && (
- <div style={{fontSize:9, color:"#6677aa", lineHeight:1.5,
- textDecoration:"line-through", padding:"4px 8px",
- background:"#1a0808", borderRadius:3, marginBottom:3}}>
+ <div style={{fontSize:12, color:"#64748b", lineHeight:1.65,
+ textDecoration:"line-through", padding:"6px 10px",
+ background:"rgba(30,8,8,0.6)", borderRadius:4, marginBottom:4}}>
  {linkifyClauses(p.prevCore, onOpenClause)}
  </div>
  )}
  {p.newCore && (
- <div style={{fontSize:9, color:"#9aaabb", lineHeight:1.5,
- padding:"4px 8px", background:"#0a0a14", borderRadius:3}}>
+ <div style={{fontSize:12, color:"#cbd5e1", lineHeight:1.65,
+ padding:"6px 10px", background:"#1e293b", borderRadius:4}}>
  {linkifyClauses(p.newCore, onOpenClause)}
  </div>
  )}
@@ -5136,16 +5136,16 @@ function HurdleTracker() {
  {/* 타이틀 */}
  <div style={{marginBottom:20, display:"flex", alignItems:"center", justifyContent:"space-between", gap:16}}>
  <div>
- <div style={{fontSize:14, fontWeight:700, color:"#c8d0dc", marginBottom:4}}>Hurdle 달성 트래커</div>
+ <div style={{fontSize:14, fontWeight:700, color:"#cbd5e1", marginBottom:4}}>Hurdle 달성 트래커</div>
  <div style={{fontSize:10, color:"#475569", lineHeight:1.7}}>
  SAA §6.3 — KT 라이선스 총량: <span style={{color:"#60a5fa"}}>{fmt(HURDLE_TARGET)}</span>
  &nbsp;(선구매 $50M + Y5 추가 $5M) &nbsp;|&nbsp; 미달성 해지 시 Surviving QRC good faith 협상
  </div>
  </div>
  <div style={{display:"flex", alignItems:"center", gap:8}}>
- <span style={{fontSize:9, color:"#475569"}}>계약 시작</span>
+ <span style={{fontSize:11, color:"#475569"}}>계약 시작</span>
  <input type="number" value={startYear} onChange={e=>{ setStartYear(+e.target.value); saveRecords(records,+e.target.value); }}
- style={{width:64, background:"#0f0f1a", border:"1px solid #1e2030", borderRadius:4,
+ style={{width:64, background:"#1e293b", border:"1px solid #334155", borderRadius:4,
  padding:"4px 6px", fontSize:11, color:"#e2e8f0", fontFamily:"inherit", outline:"none", textAlign:"center"}}/>
  </div>
  </div>
@@ -5158,22 +5158,22 @@ function HurdleTracker() {
  { label:"Revenue 달성", value:fmt(totalRevenue), sub:`${pct.toFixed(1)}% / Hurdle`, color:riskColor },
  { label:"Hurdle 상태", value:riskLevel, sub:riskLevel==="달성"?"QRC 협상력 확보":"미달 시 협상 불리", color:riskColor },
  ].map((c,i) => (
- <div key={i} style={{background:"#0a0a14", border:`1px solid ${c.color}33`, borderRadius:8, padding:"12px 14px"}}>
- <div style={{fontSize:9, color:"#6677aa", marginBottom:5}}>{c.label}</div>
+ <div key={i} style={{background:"#020617", border:`1px solid ${c.color}33`, borderRadius:8, padding:"12px 14px"}}>
+ <div style={{fontSize:11, color:"#64748b", marginBottom:5}}>{c.label}</div>
  <div style={{fontSize:18, fontWeight:700, color:c.color, marginBottom:3}}>{c.value}</div>
- <div style={{fontSize:8, color:"#475569"}}>{c.sub}</div>
+ <div style={{fontSize:10, color:"#475569"}}>{c.sub}</div>
  </div>
  ))}
  </div>
 
  {/* -- 내부 탭 -- */}
- <div style={{display:"flex", borderBottom:"1px solid #1a1a2e", marginBottom:16, gap:0}}>
+ <div style={{display:"flex", borderBottom:"1px solid #334155", marginBottom:16, gap:0}}>
  {[["revenue","📈 Revenue 실적 (Hurdle)"],["purchase","💳 연간 선구매 스케줄"]].map(([k,label])=>(
  <button key={k} onClick={()=>setActiveTab(k)}
  style={{padding:"8px 18px", fontSize:11, fontWeight:600, border:"none", cursor:"pointer",
  fontFamily:"inherit", background:"transparent",
  borderBottom:activeTab===k?"2px solid #60a5fa":"2px solid transparent",
- color:activeTab===k?"#60a5fa":"#6677aa"}}>
+ color:activeTab===k?"#60a5fa":"#64748b"}}>
  {label}
  </button>
  ))}
@@ -5183,18 +5183,18 @@ function HurdleTracker() {
  {activeTab==="revenue" && (<>
 
  {/* 프로그레스 바 */}
- <div style={{marginBottom:16, background:"#0a0a14", border:"1px solid #1e2030", borderRadius:8, padding:16}}>
+ <div style={{marginBottom:16, background:"#020617", border:"1px solid #334155", borderRadius:8, padding:16}}>
  <div style={{display:"flex", justifyContent:"space-between", marginBottom:8}}>
- <span style={{fontSize:10, color:"#8899aa", fontWeight:600}}>Hurdle 달성률</span>
+ <span style={{fontSize:10, color:"#94a3b8", fontWeight:600}}>Hurdle 달성률</span>
  <span style={{fontSize:10, color:riskColor, fontWeight:700}}>{fmt(totalRevenue)} / {fmt(HURDLE_TARGET)}</span>
  </div>
- <div style={{background:"#0f0f1a", borderRadius:4, height:14, overflow:"hidden", position:"relative"}}>
+ <div style={{background:"#1e293b", borderRadius:4, height:14, overflow:"hidden", position:"relative"}}>
  <div style={{position:"absolute", height:"100%", borderRadius:4,
  background:`linear-gradient(90deg, ${riskColor}88, ${riskColor})`,
  width:`${pct}%`, transition:"width 0.4s"}}/>
  <div style={{position:"absolute", left:"70%", top:0, width:1, height:"100%", background:"#f59e0b66"}}/>
  </div>
- <div style={{display:"flex", justifyContent:"space-between", marginTop:4, fontSize:8, color:"#2a3a4a"}}>
+ <div style={{display:"flex", justifyContent:"space-between", marginTop:4, fontSize:10, color:"#2a3a4a"}}>
  <span>$0</span>
  <span style={{color:"#f59e0b55"}}>70% ($38.5M)</span>
  <span>{fmt(HURDLE_TARGET)}</span>
@@ -5203,8 +5203,8 @@ function HurdleTracker() {
 
  {/* 월별 추이 그래프 */}
  {monthlyData.length > 0 && (
- <div style={{marginBottom:16, background:"#0a0a14", border:"1px solid #1e2030", borderRadius:8, padding:16}}>
- <div style={{fontSize:10, color:"#8899aa", fontWeight:600, marginBottom:12}}>월별 누적 Revenue 추이</div>
+ <div style={{marginBottom:16, background:"#020617", border:"1px solid #334155", borderRadius:8, padding:16}}>
+ <div style={{fontSize:10, color:"#94a3b8", fontWeight:600, marginBottom:12}}>월별 누적 Revenue 추이</div>
  <svg width="100%" viewBox={`0 0 ${Math.max(monthlyData.length*72,300)} 140`} style={{overflow:"visible"}}>
  <line x1="0" y1={110*(1-HURDLE_TARGET/maxCum)} x2="100%" y2={110*(1-HURDLE_TARGET/maxCum)}
  stroke="#ff2d2055" strokeWidth="1" strokeDasharray="4,3"/>
@@ -5245,56 +5245,56 @@ function HurdleTracker() {
  </button>
  </div>
  {showForm && (
- <div style={{marginBottom:14, padding:16, background:"#0a0a14", border:"1px solid #1e2030", borderRadius:8}}>
+ <div style={{marginBottom:14, padding:16, background:"#020617", border:"1px solid #334155", borderRadius:8}}>
  {/* 1행: 체결일 / 고객 유형 / 고객사 / 계약기간 / 내용 */}
  <div style={{display:"grid", gridTemplateColumns:"140px 130px 1fr 100px 1fr", gap:10, marginBottom:12, alignItems:"end"}}>
  <div>
- <div style={{fontSize:9, color:"#6677aa", marginBottom:4}}>계약 체결일</div>
+ <div style={{fontSize:11, color:"#64748b", marginBottom:4}}>계약 체결일</div>
  <input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}
- style={{width:"100%",background:"#0f0f1a",border:"1px solid #1e2030",borderRadius:4,
+ style={{width:"100%",background:"#1e293b",border:"1px solid #334155",borderRadius:4,
  padding:"6px 8px",fontSize:11,color:"#e2e8f0",fontFamily:"inherit",outline:"none",
  boxSizing:"border-box",colorScheme:"dark"}}/>
  </div>
  <div>
- <div style={{fontSize:9, color:"#6677aa", marginBottom:4}}>고객 유형</div>
+ <div style={{fontSize:11, color:"#64748b", marginBottom:4}}>고객 유형</div>
  <select value={form.customerType} onChange={e=>setForm({...form,customerType:e.target.value})}
- style={{width:"100%",background:"#0f0f1a",border:"1px solid #1e2030",borderRadius:4,
+ style={{width:"100%",background:"#1e293b",border:"1px solid #334155",borderRadius:4,
  padding:"6px 8px",fontSize:11,color:"#e2e8f0",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}>
  {["Target Market","KT그룹"].map(t=><option key={t} value={t}>{t}</option>)}
  </select>
  </div>
  <div>
- <div style={{fontSize:9, color:"#6677aa", marginBottom:4}}>고객사</div>
+ <div style={{fontSize:11, color:"#64748b", marginBottom:4}}>고객사</div>
  <input value={form.customer} onChange={e=>setForm({...form,customer:e.target.value})}
  placeholder="현대자동차"
- style={{width:"100%",background:"#0f0f1a",border:"1px solid #1e2030",borderRadius:4,
+ style={{width:"100%",background:"#1e293b",border:"1px solid #334155",borderRadius:4,
  padding:"6px 8px",fontSize:11,color:"#e2e8f0",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
  </div>
  <div>
- <div style={{fontSize:9, color:"#6677aa", marginBottom:4}}>계약 기간</div>
+ <div style={{fontSize:11, color:"#64748b", marginBottom:4}}>계약 기간</div>
  <select value={form.years} onChange={e=>{
  const y = parseInt(e.target.value)||1;
  const prev = form.yearlyAmounts;
  const next = Array(y).fill("").map((_,i)=>prev[i]||"");
  setForm({...form, years:String(y), yearlyAmounts:next});
  }}
- style={{width:"100%",background:"#0f0f1a",border:"1px solid #1e2030",borderRadius:4,
+ style={{width:"100%",background:"#1e293b",border:"1px solid #334155",borderRadius:4,
  padding:"6px 8px",fontSize:11,color:"#e2e8f0",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}>
  {[1,2,3,4,5].map(y=><option key={y} value={y}>{y}년</option>)}
  </select>
  </div>
  <div>
- <div style={{fontSize:9, color:"#6677aa", marginBottom:4}}>계약 내용</div>
+ <div style={{fontSize:11, color:"#64748b", marginBottom:4}}>계약 내용</div>
  <input value={form.note} onChange={e=>setForm({...form,note:e.target.value})}
  placeholder="플랫폼 라이선스"
- style={{width:"100%",background:"#0f0f1a",border:"1px solid #1e2030",borderRadius:4,
+ style={{width:"100%",background:"#1e293b",border:"1px solid #334155",borderRadius:4,
  padding:"6px 8px",fontSize:11,color:"#e2e8f0",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
  </div>
  </div>
 
  {/* 2행: 연도별 지급액 */}
  <div style={{marginBottom:12}}>
- <div style={{fontSize:9, color:"#6677aa", marginBottom:6}}>
+ <div style={{fontSize:11, color:"#64748b", marginBottom:6}}>
  연도별 지급액 (USD) &nbsp;
  <span style={{color:"#2a3a4a"}}>
  총액: ${form.yearlyAmounts.reduce((s,v)=>s+(parseFloat(String(v).replace(/,/g,''))||0),0).toLocaleString()}
@@ -5303,7 +5303,7 @@ function HurdleTracker() {
  <div style={{display:"flex", gap:8, flexWrap:"wrap"}}>
  {form.yearlyAmounts.map((amt, i) => (
  <div key={i} style={{display:"flex", flexDirection:"column", gap:3, minWidth:100}}>
- <div style={{fontSize:8, color:"#475569"}}>{i+1}년차</div>
+ <div style={{fontSize:10, color:"#475569"}}>{i+1}년차</div>
  <input
  value={amt}
  onChange={e=>{
@@ -5312,7 +5312,7 @@ function HurdleTracker() {
  setForm({...form, yearlyAmounts:next});
  }}
  placeholder="1500000"
- style={{background:"#0f0f1a",border:"1px solid #1e2030",borderRadius:4,
+ style={{background:"#1e293b",border:"1px solid #334155",borderRadius:4,
  padding:"6px 8px",fontSize:11,color:"#e2e8f0",fontFamily:"inherit",
  outline:"none",width:"100%",boxSizing:"border-box"}}/>
  </div>
@@ -5327,17 +5327,17 @@ function HurdleTracker() {
  {editId?"수정 완료":"저장"}
  </button>
  <button onClick={()=>{setShowForm(false);setEditId(null);setForm(EMPTY_FORM);}}
- style={{padding:"6px 14px",background:"none",border:"1px solid #1e2030",
- borderRadius:4,color:"#6677aa",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>취소</button>
+ style={{padding:"6px 14px",background:"none",border:"1px solid #334155",
+ borderRadius:4,color:"#64748b",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>취소</button>
  </div>
  </div>
  )}
 
  {/* 실적 테이블 */}
- <div style={{background:"#0a0a14",border:"1px solid #1e2030",borderRadius:8,overflow:"hidden",marginBottom:16}}>
- <div style={{padding:"10px 16px",borderBottom:"1px solid #1e2030",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
- <span style={{fontSize:10,color:"#8899aa",fontWeight:600}}>Revenue 실적 ({records.length}건)</span>
- <span style={{fontSize:9,color:"#475569"}}>{records.length>0?`합계 ${fmt(totalRevenue)}`:""}</span>
+ <div style={{background:"#020617",border:"1px solid #334155",borderRadius:8,overflow:"hidden",marginBottom:16}}>
+ <div style={{padding:"10px 16px",borderBottom:"1px solid #334155",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+ <span style={{fontSize:10,color:"#94a3b8",fontWeight:600}}>Revenue 실적 ({records.length}건)</span>
+ <span style={{fontSize:11,color:"#475569"}}>{records.length>0?`합계 ${fmt(totalRevenue)}`:""}</span>
  </div>
  {records.length===0 ? (
  <div style={{padding:"28px",textAlign:"center",fontSize:10,color:"#475569",lineHeight:1.8}}>
@@ -5346,44 +5346,44 @@ function HurdleTracker() {
  ) : (
  <table style={{width:"100%",borderCollapse:"collapse",fontSize:10}}>
  <thead>
- <tr style={{borderBottom:"1px solid #1e2030"}}>
+ <tr style={{borderBottom:"1px solid #334155"}}>
  {["계약일","고객사","유형","계약구조","총액","내용",""].map((h,i)=>(
- <th key={i} style={{padding:"7px 12px",textAlign:"left",fontSize:9,color:"#475569",fontWeight:600}}>{h}</th>
+ <th key={i} style={{padding:"7px 12px",textAlign:"left",fontSize:11,color:"#475569",fontWeight:600}}>{h}</th>
  ))}
  </tr>
  </thead>
  <tbody>
  {[...records].sort((a,b)=>b.date.localeCompare(a.date)).map(r=>{
- const cc = ctColor[r.customerType]||"#8899aa";
+ const cc = ctColor[r.customerType]||"#94a3b8";
  return (
  <tr key={r.id} style={{borderBottom:"1px solid #0f0f1a"}}>
- <td style={{padding:"7px 12px",color:"#9aaabb",whiteSpace:"nowrap"}}>{r.date}</td>
- <td style={{padding:"7px 12px",color:"#c8d0dc",fontWeight:500}}>{r.customer||"-"}</td>
+ <td style={{padding:"7px 12px",color:"#94a3b8",whiteSpace:"nowrap"}}>{r.date}</td>
+ <td style={{padding:"7px 12px",color:"#cbd5e1",fontWeight:500}}>{r.customer||"-"}</td>
  <td style={{padding:"7px 12px"}}>
- <span style={{fontSize:8,fontWeight:700,color:cc,background:cc+"18",padding:"1px 5px",borderRadius:2}}>{r.customerType}</span>
+ <span style={{fontSize:10,fontWeight:700,color:cc,background:cc+"18",padding:"1px 5px",borderRadius:2}}>{r.customerType}</span>
  </td>
  <td style={{padding:"7px 12px"}}>
  {r.yearlyAmounts && r.years > 1 ? (
  <div>
- <span style={{fontSize:9,color:"#9aaabb"}}>{r.years}년 계약</span>
+ <span style={{fontSize:11,color:"#94a3b8"}}>{r.years}년 계약</span>
  <div style={{display:"flex",gap:3,marginTop:2,flexWrap:"wrap"}}>
  {r.yearlyAmounts.map((a,i)=>(
- <span key={i} style={{fontSize:8,color:"#60a5fa66",background:"#60a5fa0a",
+ <span key={i} style={{fontSize:10,color:"#60a5fa66",background:"#60a5fa0a",
  padding:"1px 4px",borderRadius:2}}>Y{i+1}:{fmt(a)}</span>
  ))}
  </div>
  </div>
  ) : (
- <span style={{fontSize:9,color:"#9aaabb"}}>1년 계약</span>
+ <span style={{fontSize:11,color:"#94a3b8"}}>1년 계약</span>
  )}
  </td>
  <td style={{padding:"7px 12px",color:"#60a5fa",fontWeight:600,whiteSpace:"nowrap"}}>{fmt(r.amount)}</td>
- <td style={{padding:"7px 12px",color:"#6677aa",fontSize:9}}>{r.note||"-"}</td>
+ <td style={{padding:"7px 12px",color:"#64748b",fontSize:9}}>{r.note||"-"}</td>
  <td style={{padding:"7px 12px"}}>
  <div style={{display:"flex",gap:6}}>
  <button onClick={()=>startEdit(r)}
- style={{background:"none",border:"1px solid #1e2030",borderRadius:2,
- padding:"2px 7px",fontSize:8,color:"#6677aa",cursor:"pointer",fontFamily:"inherit"}}>수정</button>
+ style={{background:"none",border:"1px solid #334155",borderRadius:2,
+ padding:"2px 7px",fontSize:10,color:"#64748b",cursor:"pointer",fontFamily:"inherit"}}>수정</button>
  <button onClick={()=>deleteRecord(r.id)}
  style={{background:"none",border:"none",color:"#475569",cursor:"pointer",
  fontSize:13,fontFamily:"inherit",lineHeight:1}}>×</button>
@@ -5403,7 +5403,7 @@ function HurdleTracker() {
  background:riskLevel==="HIGH"?"#1a0808":riskLevel==="MEDIUM"?"#1a1208":"#081a0f",
  border:`1px solid ${riskColor}33`,borderRadius:8}}>
  <div style={{fontSize:10,color:riskColor,fontWeight:700,marginBottom:6}}>⚖️ Hurdle 리스크 분석 (SAA §6.3)</div>
- <div style={{fontSize:10,color:"#9aaabb",lineHeight:1.8}}>
+ <div style={{fontSize:10,color:"#94a3b8",lineHeight:1.8}}>
  {riskLevel==="달성"
  ? `Hurdle ${fmt(HURDLE_TARGET)} 달성. 계약 해지 시에도 SAA §6.3에 따라 Surviving QRC 수익 배분 협상 권리 보유.`
  : riskLevel==="LOW"
@@ -5420,18 +5420,18 @@ function HurdleTracker() {
  {/* ---------- 선구매 스케줄 탭 ---------- */}
  {activeTab==="purchase" && (
  <div>
- <div style={{fontSize:10,color:"#6677aa",marginBottom:14,lineHeight:1.7}}>
+ <div style={{fontSize:10,color:"#64748b",marginBottom:14,lineHeight:1.7}}>
  SAA에 고정된 KT → Palantir 연간 선구매 스케줄입니다. 실제 지급 완료 시 체크하세요.<br/>
  Y5 지급 시 Palantir으로부터 추가 $5M 라이선스를 수취합니다.
  </div>
 
  {/* 선구매 진행 바 */}
- <div style={{marginBottom:20,background:"#0a0a14",border:"1px solid #1e2030",borderRadius:8,padding:16}}>
+ <div style={{marginBottom:20,background:"#020617",border:"1px solid #334155",borderRadius:8,padding:16}}>
  <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
- <span style={{fontSize:10,color:"#8899aa",fontWeight:600}}>선구매 진행률</span>
+ <span style={{fontSize:10,color:"#94a3b8",fontWeight:600}}>선구매 진행률</span>
  <span style={{fontSize:10,color:"#a78bfa",fontWeight:700}}>{fmt(totalPurchased)} / $50M</span>
  </div>
- <div style={{background:"#0f0f1a",borderRadius:4,height:10,overflow:"hidden"}}>
+ <div style={{background:"#1e293b",borderRadius:4,height:10,overflow:"hidden"}}>
  <div style={{height:"100%",borderRadius:4,background:"linear-gradient(90deg,#a78bfa88,#a78bfa)",
  width:`${Math.min(100,(totalPurchased/50000000)*100)}%`,transition:"width 0.4s"}}/>
  </div>
@@ -5445,31 +5445,31 @@ function HurdleTracker() {
  const totalWithBonus = p.amount + p.bonus;
  return (
  <div key={p.year}
- style={{background:"#0a0a14",border:`1px solid ${done?"#a78bfa44":"#1e2030"}`,
+ style={{background:"#020617",border:`1px solid ${done?"#a78bfa44":"#334155"}`,
  borderRadius:8,padding:14,cursor:"pointer",transition:"all 0.15s",
  opacity:done?1:0.7}}
  onClick={()=>togglePurchased(p.year)}>
  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
- <span style={{fontSize:11,fontWeight:700,color:done?"#a78bfa":"#6677aa"}}>{p.label}</span>
- <span style={{fontSize:9,color:"#475569"}}>{yr}년</span>
+ <span style={{fontSize:11,fontWeight:700,color:done?"#a78bfa":"#64748b"}}>{p.label}</span>
+ <span style={{fontSize:11,color:"#475569"}}>{yr}년</span>
  </div>
- <div style={{fontSize:16,fontWeight:700,color:done?"#c8d0dc":"#475569",marginBottom:4}}>
+ <div style={{fontSize:16,fontWeight:700,color:done?"#cbd5e1":"#475569",marginBottom:4}}>
  {fmt(p.amount)}
  </div>
  {p.bonus>0 && (
- <div style={{fontSize:9,color:"#34d399",marginBottom:6}}>
+ <div style={{fontSize:11,color:"#34d399",marginBottom:6}}>
  +{fmt(p.bonus)} 라이선스 추가 수취
  </div>
  )}
- <div style={{fontSize:9,color:"#475569",marginBottom:8}}>
+ <div style={{fontSize:11,color:"#475569",marginBottom:8}}>
  확보 라이선스: {fmt(totalWithBonus)}
  </div>
  <div style={{display:"flex",alignItems:"center",gap:6}}>
- <div style={{width:12,height:12,borderRadius:"50%",border:`2px solid ${done?"#a78bfa":"#1e2030"}`,
+ <div style={{width:12,height:12,borderRadius:"50%",border:`2px solid ${done?"#a78bfa":"#334155"}`,
  background:done?"#a78bfa":"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>
- {done && <span style={{fontSize:8,color:"#07070f",fontWeight:700}}>✓</span>}
+ {done && <span style={{fontSize:10,color:"#07070f",fontWeight:700}}>✓</span>}
  </div>
- <span style={{fontSize:9,color:done?"#a78bfa":"#475569"}}>{done?"지급 완료":"미지급"}</span>
+ <span style={{fontSize:11,color:done?"#a78bfa":"#475569"}}>{done?"지급 완료":"미지급"}</span>
  </div>
  </div>
  );
@@ -5477,20 +5477,20 @@ function HurdleTracker() {
  </div>
 
  {/* 합계 요약 */}
- <div style={{marginTop:16,padding:"12px 16px",background:"#0a0a14",border:"1px solid #1e2030",borderRadius:8}}>
+ <div style={{marginTop:16,padding:"12px 16px",background:"#020617",border:"1px solid #334155",borderRadius:8}}>
  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16,fontSize:10}}>
  <div>
- <div style={{color:"#6677aa",marginBottom:3}}>총 선구매 (5년)</div>
+ <div style={{color:"#64748b",marginBottom:3}}>총 선구매 (5년)</div>
  <div style={{color:"#a78bfa",fontWeight:700,fontSize:14}}>$50M</div>
  </div>
  <div>
- <div style={{color:"#6677aa",marginBottom:3}}>총 확보 라이선스</div>
+ <div style={{color:"#64748b",marginBottom:3}}>총 확보 라이선스</div>
  <div style={{color:"#34d399",fontWeight:700,fontSize:14}}>$55M <span style={{fontSize:10,fontWeight:400}}>(Y5 +$5M 포함)</span></div>
  </div>
  <div>
- <div style={{color:"#6677aa",marginBottom:3}}>현재 확보 라이선스</div>
+ <div style={{color:"#64748b",marginBottom:3}}>현재 확보 라이선스</div>
  <div style={{color:"#60a5fa",fontWeight:700,fontSize:14}}>{fmt(totalLicense)}</div>
- <div style={{color:"#475569",fontSize:8,marginTop:2}}>미사용 {fmt(unusedLicense)}</div>
+ <div style={{color:"#475569",fontSize:10,marginTop:2}}>미사용 {fmt(unusedLicense)}</div>
  </div>
  </div>
  </div>
@@ -5595,7 +5595,7 @@ function HistoryTab({ history, onSelect, onDelete, onUpdateMemo, onClear }) {
         <span style={{fontSize:10, fontWeight:700, color:rc, background:rc+"18", padding:"2px 7px", borderRadius:4}}>
          {h.result?.risk_level}
         </span>
-        {h.memo && <span style={{fontSize:9, color:"#a78bfa", background:"#a78bfa18", padding:"1px 6px", borderRadius:3}}>메모</span>}
+        {h.memo && <span style={{fontSize:11, color:"#a78bfa", background:"#a78bfa18", padding:"1px 6px", borderRadius:3}}>메모</span>}
         <span style={{fontSize:10, color:"#475569", marginLeft:"auto"}}>{h.ts}</span>
         <button onClick={e=>{e.stopPropagation(); if(confirm("이 항목을 삭제할까요?")) onDelete(h.id);}}
          style={{background:"none", border:"none", color:"#475569", cursor:"pointer", fontSize:14, padding:"0 2px", lineHeight:1}}>×</button>
@@ -5625,7 +5625,7 @@ function HistoryTab({ history, onSelect, onDelete, onUpdateMemo, onClear }) {
          {h.memo && <div style={{fontSize:10, color:"#a78bfa", flex:1, lineHeight:1.4}}>{h.memo.length>50?h.memo.slice(0,50)+"…":h.memo}</div>}
          <button onClick={e=>startEdit(h,e)}
           style={{background:"none", border:"1px solid #334155", borderRadius:4,
-           padding:"2px 8px", fontSize:9, color:"#64748b", cursor:"pointer", fontFamily:"inherit",
+           padding:"2px 8px", fontSize:11, color:"#64748b", cursor:"pointer", fontFamily:"inherit",
            whiteSpace:"nowrap", marginLeft:"auto"}}>
           {h.memo ? "메모 수정" : "메모 추가"}
          </button>
@@ -5839,7 +5839,7 @@ ${ktGoals || '(\uba85\uc2dc \uc5c6\uc74c \u2014 KT \uc804\ubc18\uc801 \uc774\uc7
  <div style={{padding:'10px 20px', borderBottom:'1px solid #1a1a2e',
  background:'#0a0a14', flexShrink:0}}>
  <div style={{fontSize:13, fontWeight:700, color:'#8899bb'}}>\ud83e\udd1d \ud611\uc0c1 \uc2dc\ubbac\ub808\uc774\ud130</div>
- <div style={{fontSize:9, color:'#475569', marginTop:2}}>
+ <div style={{fontSize:11, color:'#475569', marginTop:2}}>
  Palantir Amendment \uc81c\uc548\uc11c\ub97c \uc5c5\ub85c\ub4dc\ud558\uac70\ub098 \ubd99\uc5ec\ub123\uc73c\uba74 \u2014 \uc870\ud56d\ubcc4 \ubd84\uc11d, \ubc14\ud130 \uc804\ub7b5, \ud611\uc0c1 \ub300\ubcf8\uc744 \uc81c\uc2dc\ud569\ub2c8\ub2e4
  </div>
  </div>
@@ -5881,14 +5881,14 @@ ${ktGoals || '(\uba85\uc2dc \uc5c6\uc74c \u2014 KT \uc804\ubc18\uc801 \uc774\uc7
  <div>
  <div style={{fontSize:18, marginBottom:4}}>\ud83d\udcc4</div>
  <div style={{fontSize:10, color:'#60a5fa', fontWeight:600}}>{fileName}</div>
- <div style={{fontSize:9, color:'#475569', marginTop:2}}>\ud074\ub9ad\ud558\uc5ec \ubcc0\uacbd</div>
+ <div style={{fontSize:11, color:'#475569', marginTop:2}}>\ud074\ub9ad\ud558\uc5ec \ubcc0\uacbd</div>
  </div>
  ) : (
  <div>
  <div style={{fontSize:20, marginBottom:6, opacity:0.4}}>\ud83d\udcce</div>
  <div style={{fontSize:10, color:'#475569'}}>
  Amendment \uc81c\uc548\uc11c \uc5c5\ub85c\ub4dc<br/>
- <span style={{fontSize:9, color:'#334155'}}>PDF \u00b7 TXT \uc9c0\uc6d0</span>
+ <span style={{fontSize:11, color:'#334155'}}>PDF \u00b7 TXT \uc9c0\uc6d0</span>
  </div>
  </div>
  )}
@@ -5902,7 +5902,7 @@ ${ktGoals || '(\uba85\uc2dc \uc5c6\uc74c \u2014 KT \uc804\ubc18\uc801 \uc774\uc7
  <div style={{fontSize:10, color:'#6677aa', fontWeight:700}}>
  Palantir \uc81c\uc548 \ub0b4\uc6a9
  </div>
- <div style={{fontSize:9, color:'#334155', lineHeight:1.6, padding:'6px 8px',
+ <div style={{fontSize:11, color:'#334155', lineHeight:1.6, padding:'6px 8px',
  background:'#0f0f1a', borderRadius:4, border:'1px solid #1a1a2e'}}>
  \ud83d\udca1 <strong style={{color:'#475569'}}>\uc608\uc2dc:</strong> \uc774\uba54\uc77c/\ubb38\uc11c\uc5d0\uc11c \ubc1b\uc740 Palantir \uc694\uad6c\uc0ac\ud56d\uc744 \uadf8\ub300\ub85c \ubd99\uc5ec\ub123\uc73c\uc138\uc694.<br/>
  "Section 6.3\uc744 \uc218\uc815\ud558\uc5ec Surviving QRC\ub97c 5\ub144\uc73c\ub85c \uc5f0\uc7a5\ud558\uace0, \u00a78.2 \ubc30\uc0c1 \ud55c\ub3c4\ub97c $200K\ub85c \ub0ae\ucd94\uae38 \uc6d0\ud569\ub2c8\ub2e4."
@@ -5921,7 +5921,7 @@ ${ktGoals || '(\uba85\uc2dc \uc5c6\uc74c \u2014 KT \uc804\ubc18\uc801 \uc774\uc7
  <div style={{fontSize:10, color:'#6677aa', fontWeight:700, marginBottom:4}}>
  \ud83c\udfaf KT \ud611\uc0c1 \ubaa9\ud45c <span style={{color:'#334155', fontWeight:400}}>(\uc120\ud0dd)</span>
  </div>
- <div style={{fontSize:9, color:'#334155', marginBottom:5, lineHeight:1.6}}>
+ <div style={{fontSize:11, color:'#334155', marginBottom:5, lineHeight:1.6}}>
  \uc6b0\ub9ac\uac00 \uaf2d \uc5bb\uace0 \uc2f6\uc740 \uac83, \ub610\ub294 \ub9c9\uc544\uc57c \ud558\ub294 \uac83\uc744 \uc790\uc720\ub86d\uac8c \uc801\uc73c\uc138\uc694
  </div>
  <textarea value={ktGoals} onChange={e => setKtGoals(e.target.value)}
@@ -5946,13 +5946,13 @@ ${ktGoals || '(\uba85\uc2dc \uc5c6\uc74c \u2014 KT \uc804\ubc18\uc801 \uc774\uc7
  {result && !result.error && !loading && (
  <div style={{padding:'10px 12px', background:'#0f1e35',
  borderRadius:6, border:'1px solid #1e3a6e'}}>
- <div style={{fontSize:9, color:'#60a5fa', fontWeight:700, marginBottom:6}}>
+ <div style={{fontSize:11, color:'#60a5fa', fontWeight:700, marginBottom:6}}>
  \ubd84\uc11d \uc644\ub8cc
  </div>
  <div style={{fontSize:10, color:'#c8d0dc', lineHeight:1.6}}>
  {result.summary}
  </div>
- <div style={{marginTop:8, fontSize:9, color:'#6677aa'}}>
+ <div style={{marginTop:8, fontSize:11, color:'#6677aa'}}>
  \ucd5c\uc885 \uad8c\uace0: <span style={{color:'#e2e8f0', fontWeight:600}}>{result.recommendation}</span>
  </div>
  </div>
@@ -5968,7 +5968,7 @@ ${ktGoals || '(\uba85\uc2dc \uc5c6\uc74c \u2014 KT \uc804\ubc18\uc801 \uc774\uc7
  flexDirection:'column', gap:12}}>
  <div style={{fontSize:28}}>\u2699\ufe0f</div>
  <div style={{fontSize:11, color:'#475569'}}>\ud611\uc0c1 \uc804\ub7b5 \ubd84\uc11d \uc911...</div>
- <div style={{fontSize:9, color:'#334155'}}>\uc870\ud56d \ubd84\uc11d \u2192 \ubc14\ud130 \ud328\ud0a4\uc9c0 \uad6c\uc131 \u2192 \ud611\uc0c1 \ub300\ubcf8 \uc791\uc131</div>
+ <div style={{fontSize:11, color:'#334155'}}>\uc870\ud56d \ubd84\uc11d \u2192 \ubc14\ud130 \ud328\ud0a4\uc9c0 \uad6c\uc131 \u2192 \ud611\uc0c1 \ub300\ubcf8 \uc791\uc131</div>
  </div>
  )}
 
@@ -6019,7 +6019,7 @@ ${ktGoals || '(\uba85\uc2dc \uc5c6\uc74c \u2014 KT \uc804\ubc18\uc801 \uc774\uc7
  border:'1px solid ' + rc + '33', background:'#0a0a14'}}>
  <div style={{padding:'8px 12px', background: rc + '0d',
  display:'flex', alignItems:'center', gap:8}}>
- <span style={{fontSize:9, fontWeight:700, color:rc,
+ <span style={{fontSize:11, fontWeight:700, color:rc,
  background:rc+'22', padding:'2px 7px', borderRadius:3}}>
  {c.riskLevel}
  </span>
@@ -6027,7 +6027,7 @@ ${ktGoals || '(\uba85\uc2dc \uc5c6\uc74c \u2014 KT \uc804\ubc18\uc801 \uc774\uc7
  {c.clauseId}
  </span>
  <span style={{fontSize:10, color:'#8899aa'}}>{c.title}</span>
- <span style={{marginLeft:'auto', fontSize:9, fontWeight:700,
+ <span style={{marginLeft:'auto', fontSize:11, fontWeight:700,
  color:pc, background:pc+'18', padding:'2px 7px', borderRadius:3}}>
  {posLabel[c.ktPosition]}
  </span>
@@ -6035,14 +6035,14 @@ ${ktGoals || '(\uba85\uc2dc \uc5c6\uc74c \u2014 KT \uc804\ubc18\uc801 \uc774\uc7
  <div style={{padding:'10px 12px', display:'grid',
  gridTemplateColumns:'1fr 1fr', gap:10}}>
  <div>
- <div style={{fontSize:8, color:'#a78bfa', fontWeight:700,
+ <div style={{fontSize:10, color:'#a78bfa', fontWeight:700,
  marginBottom:4}}>Palantir\uac00 \uc6d0\ud558\ub294 \uac83</div>
  <div style={{fontSize:10, color:'#9aaabb', lineHeight:1.6}}>
  {c.palantirProposal}
  </div>
  </div>
  <div>
- <div style={{fontSize:8, color:rc, fontWeight:700,
+ <div style={{fontSize:10, color:rc, fontWeight:700,
  marginBottom:4}}>KT \uc601\ud5a5</div>
  <div style={{fontSize:10, color:'#9aaabb', lineHeight:1.6}}>
  {c.ktRisk}
@@ -6071,7 +6071,7 @@ ${ktGoals || '(\uba85\uc2dc \uc5c6\uc74c \u2014 KT \uc804\ubc18\uc801 \uc774\uc7
  <span style={{fontSize:10, color:'#c8d0dc', fontWeight:600}}>
  {pkg.packageName}
  </span>
- <span style={{marginLeft:'auto', fontSize:9, color:pc,
+ <span style={{marginLeft:'auto', fontSize:11, color:pc,
  background:pc+'18', padding:'2px 7px', borderRadius:3, fontWeight:700}}>
  \uc131\uacf5\ud655\ub960 {pkg.successProbability}
  </span>
@@ -6080,10 +6080,10 @@ ${ktGoals || '(\uba85\uc2dc \uc5c6\uc74c \u2014 KT \uc804\ubc18\uc801 \uc774\uc7
  gridTemplateColumns:'1fr 1fr', gap:12}}>
  <div style={{padding:'8px 10px', background:'#1a0a0a',
  borderRadius:5, border:'1px solid #ff444422'}}>
- <div style={{fontSize:8, color:'#ff6b6b', fontWeight:700,
+ <div style={{fontSize:10, color:'#ff6b6b', fontWeight:700,
  marginBottom:6}}>KT\uac00 \uc591\ubcf4\ud558\ub294 \uac83</div>
  {pkg.ktGives.map((g, j) => (
- <div key={j} style={{fontSize:9, color:'#cc8888',
+ <div key={j} style={{fontSize:11, color:'#cc8888',
  marginBottom:4, paddingLeft:8,
  borderLeft:'2px solid #ff444433', lineHeight:1.5}}>
  {g}
@@ -6092,10 +6092,10 @@ ${ktGoals || '(\uba85\uc2dc \uc5c6\uc74c \u2014 KT \uc804\ubc18\uc801 \uc774\uc7
  </div>
  <div style={{padding:'8px 10px', background:'#0a1a0a',
  borderRadius:5, border:'1px solid #10b98122'}}>
- <div style={{fontSize:8, color:'#10b981', fontWeight:700,
+ <div style={{fontSize:10, color:'#10b981', fontWeight:700,
  marginBottom:6}}>KT\uac00 \uc5bb\ub294 \uac83</div>
  {pkg.ktGets.map((g, j) => (
- <div key={j} style={{fontSize:9, color:'#88bb99',
+ <div key={j} style={{fontSize:11, color:'#88bb99',
  marginBottom:4, paddingLeft:8,
  borderLeft:'2px solid #10b98133', lineHeight:1.5}}>
  {g}
@@ -6104,7 +6104,7 @@ ${ktGoals || '(\uba85\uc2dc \uc5c6\uc74c \u2014 KT \uc804\ubc18\uc801 \uc774\uc7
  </div>
  </div>
  <div style={{padding:'8px 14px', borderTop:'1px solid #1e2030',
- fontSize:9, color:'#6677aa', lineHeight:1.5}}>
+ fontSize:11, color:'#6677aa', lineHeight:1.5}}>
  \ud83d\udca1 {pkg.rationale}
  </div>
  </div>
@@ -6135,7 +6135,7 @@ ${ktGoals || '(\uba85\uc2dc \uc5c6\uc74c \u2014 KT \uc804\ubc18\uc801 \uc774\uc7
  <div style={{display:'flex', flexDirection:'column', gap:12}}>
  <div style={{padding:'12px 14px', borderRadius:6,
  background:'#0f1e35', border:'1px solid #1e3a6e'}}>
- <div style={{fontSize:9, color:'#60a5fa', fontWeight:700, marginBottom:6}}>
+ <div style={{fontSize:11, color:'#60a5fa', fontWeight:700, marginBottom:6}}>
  \ud83c\udfa4 \uc624\ud504\ub2dd \uba58\ud2b8
  </div>
  <div style={{fontSize:11, color:'#c8d0dc', lineHeight:1.8,
@@ -6146,7 +6146,7 @@ ${ktGoals || '(\uba85\uc2dc \uc5c6\uc74c \u2014 KT \uc804\ubc18\uc801 \uc774\uc7
  </div>
  <div style={{padding:'12px 14px', borderRadius:6,
  background:'#0a1a0a', border:'1px solid #10b98133'}}>
- <div style={{fontSize:9, color:'#10b981', fontWeight:700, marginBottom:8}}>
+ <div style={{fontSize:11, color:'#10b981', fontWeight:700, marginBottom:8}}>
  \ud83d\udcaa \ud575\uc2ec \ub17c\uac70
  </div>
  {(result.negotiationScript?.keyArguments || []).map((arg, i) => (
@@ -6163,7 +6163,7 @@ ${ktGoals || '(\uba85\uc2dc \uc5c6\uc74c \u2014 KT \uc804\ubc18\uc801 \uc774\uc7
  </div>
  <div style={{padding:'12px 14px', borderRadius:6,
  background:'#1a1a08', border:'1px solid #f59e0b33'}}>
- <div style={{fontSize:9, color:'#f59e0b', fontWeight:700, marginBottom:6}}>
+ <div style={{fontSize:11, color:'#f59e0b', fontWeight:700, marginBottom:6}}>
  \ud83e\udd1d \ucd5c\ud6c4 \uc591\ubcf4 \uc804\ub7b5
  </div>
  <div style={{fontSize:10, color:'#bbaa77', lineHeight:1.6}}>
