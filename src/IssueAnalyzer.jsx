@@ -242,14 +242,20 @@ export default function IssueAnalyzer() {
  catch(e2) { throw new Error('JSON 파싱 실패: ' + e.message); }
  }
  
+ const toStr = (v, fallback='-') => {
+   if (!v) return fallback;
+   if (typeof v === 'string') return v;
+   if (Array.isArray(v)) return v.join('\n');
+   return String(v);
+ };
  const result = {
- situation_summary: parsed.situation_summary || query,
+ situation_summary: toStr(parsed.situation_summary, query),
  risk_level: ['HIGH','MEDIUM','LOW'].includes((parsed.risk_level||'').toUpperCase()) ? parsed.risk_level.toUpperCase() : 'MEDIUM',
- risk_reason: parsed.risk_reason || '-',
- legal_analysis: parsed.legal_analysis || '-',
- kt_defense: parsed.kt_defense || '-',
- palantir_position: parsed.palantir_position || '-',
- bottom_line: parsed.bottom_line || '-',
+ risk_reason: toStr(parsed.risk_reason),
+ legal_analysis: toStr(parsed.legal_analysis),
+ kt_defense: toStr(parsed.kt_defense),
+ palantir_position: toStr(parsed.palantir_position),
+ bottom_line: toStr(parsed.bottom_line),
  related_conflicts: Array.isArray(parsed.related_conflicts)
   ? parsed.related_conflicts.map(rc => typeof rc === "string"
     ? { id: rc, relevance_level: "중", relevance_reason: "" }
@@ -2325,6 +2331,7 @@ function linkifyClauses(text, onOpen) {
 
 function formatArgument(text, onOpen) {
  if (!text) return null;
+ if (typeof text !== "string") text = Array.isArray(text) ? text.join("\n") : String(text);
  const parts = text.split(/(?=\([0-9]+\))/);
  if (parts.length <= 1) {
  return text.split("\n").map((l,i)=>(
@@ -2355,6 +2362,7 @@ function renderBold(text) {
 
 function renderBoldLines(text) {
  if (!text) return null;
+ if (typeof text !== "string") text = Array.isArray(text) ? text.join("\n") : String(text);
  return text.split("\n").map((line, i) => (
  <span key={i}>{renderBold(line)}{i < text.split("\n").length-1 && <br/>}</span>
  ));
