@@ -1655,7 +1655,7 @@ function buildReportHTML(query, result, mode) {
 
  html += '<div style="position:fixed;bottom:24px;right:24px;display:flex;gap:8px;z-index:9999">'
  + '<button onclick="window.print()" style="padding:10px 22px;background:#1e3a6e;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.25)">출력</button>'
- + '<button onclick="window.close()" style="padding:10px 18px;background:#f1f5f9;color:#475569;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">닫기</button>'
+ + '<button onclick="window.parent.postMessage(\'closeReport\',\'*\')" style="padding:10px 18px;background:#f1f5f9;color:#475569;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">닫기</button>'
  + '</div>\n</div>\n</body></html>';
 
  return html;
@@ -1666,6 +1666,12 @@ function ReportButton({ result, query, mode }) {
   if (!result) return null;
 
   const reportHtml = buildReportHTML(query || "", result, mode || "basic");
+
+  useEffect(() => {
+    const handler = (e) => { if (e.data === "closeReport") setShowModal(false); };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
 
   const handleDownload = () => {
     const blob = new Blob([reportHtml], { type: "text/html;charset=utf-8" });
@@ -1699,19 +1705,6 @@ function ReportButton({ result, query, mode }) {
 
       {showModal && (
         <div style={{position:"fixed",inset:0,background:"rgba(4,8,20,0.92)",zIndex:9999,display:"flex",flexDirection:"column"}}>
-          <div style={{background:"#0b1120",borderBottom:"1px solid #1c2840",padding:"11px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-            <span style={{fontSize:11,fontWeight:600,color:"#5a7a9a"}}>계약 리스크 분석 리포트</span>
-            <div style={{display:"flex",gap:8}}>
-              <button onClick={handleDownload}
-                style={{...btnBase,padding:"4px 12px",background:"#102040",border:"1px solid #1d4ed844",color:"#7db8f7"}}>
-                HTML 저장
-              </button>
-              <button onClick={() => setShowModal(false)}
-                style={{...btnBase,padding:"4px 12px",background:"#1a0a0a",border:"1px solid #ef444433",color:"#f87171"}}>
-                닫기
-              </button>
-            </div>
-          </div>
           <iframe
             srcDoc={reportHtml}
             style={{flex:1, border:"none", background:"#fff"}}
