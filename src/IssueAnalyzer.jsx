@@ -1686,15 +1686,16 @@ function buildReportHTML(query, result, mode) {
 
 function ReportButton({ result, query, mode }) {
   const [showModal, setShowModal] = useState(false);
-  if (!result) return null;
-
-  const reportHtml = buildReportHTML(query || "", result, mode || "basic");
 
   useEffect(() => {
     const handler = (e) => { if (e.data === "closeReport") setShowModal(false); };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
   }, []);
+
+  if (!result) return null;
+
+  const reportHtml = buildReportHTML(query || "", result, mode || "basic");
 
   const handleDownload = () => {
     const blob = new Blob([reportHtml], { type: "text/html;charset=utf-8" });
