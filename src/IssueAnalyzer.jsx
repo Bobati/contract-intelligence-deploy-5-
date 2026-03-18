@@ -88,6 +88,7 @@ export default function IssueAnalyzer() {
  const [input, setInput] = useState("");
  const [history, setHistory] = useState([]);
  const [loading, setLoading] = useState(false);
+ const [loadingMsg, setLoadingMsg] = useState("ANALYZING...");
  const [rawDocCount, setRawDocCount] = useState(0);
  const [error, setError] = useState(null);
  const [activeHistory, setActiveHistory] = useState(null);
@@ -277,6 +278,43 @@ export default function IssueAnalyzer() {
  immediate_actions: Array.isArray(parsed.immediate_actions) ? parsed.immediate_actions : [],
  _issueType: issueType,
  };
+
+ // ── 2차 Devil's Advocate 검증 ──────────────────────────────────
+ setLoadingMsg("VERIFYING...");
+ let verification = { verdict: "CONFIRMED", issues_found: [], risk_changed: false, verification_note: "" };
+ try {
+  const vPrompt = buildVerificationPrompt(query, result);
+  const vRes = await fetch("/api/chat", {
+   method: "POST", headers: { "Content-Type": "application/json" },
+   body: JSON.stringify({ max_tokens: 1200, messages: [{ role: "user", content: vPrompt }] })
+  });
+  if (vRes.ok) {
+   const vData = await vRes.json();
+   const vText = (vData.content || []).map(c => c.text || "").join("").trim();
+   const vj = vText.indexOf('{'), vje = vText.lastIndexOf('}');
+   if (vj !== -1 && vje !== -1) {
+    const vParsed = JSON.parse(vText.slice(vj, vje + 1));
+    verification = {
+     verdict: vParsed.verdict === "REVISED" ? "REVISED" : "CONFIRMED",
+     issues_found: Array.isArray(vParsed.issues_found) ? vParsed.issues_found : [],
+     risk_changed: !!vParsed.risk_changed,
+     risk_level_original: result.risk_level,
+     risk_level: ['HIGH','MEDIUM','LOW'].includes((vParsed.risk_level||'').toUpperCase()) ? vParsed.risk_level.toUpperCase() : result.risk_level,
+     bottom_line_revised: vParsed.bottom_line_revised || null,
+     verification_note: toStr(vParsed.verification_note),
+    };
+    if (verification.risk_changed && verification.risk_level !== result.risk_level) {
+     result.risk_level = verification.risk_level;
+    }
+    if (verification.bottom_line_revised) {
+     result.bottom_line = verification.bottom_line_revised;
+    }
+   }
+  }
+ } catch(ve) { /* 검증 실패 시 원본 결과 유지 */ }
+ result._verification = verification;
+ // ─────────────────────────────────────────────────────────────
+
  const entry={id:Date.now(),query,result,mode,ts:new Date().toLocaleString("ko-KR")};
  const nh=[entry,...history];
  setHistory(nh); setActiveHistory(entry.id); await saveHistory(nh);
@@ -506,9 +544,10 @@ export default function IssueAnalyzer() {
  <div style={{overflowY:"auto",padding:24,background:"#080c14"}}>
  {loading && (
  <div style={{background:"#0b1120",border:"1px solid #1c2840",borderRadius:10,padding:40,textAlign:"center"}}>
- <div style={{fontSize:13,color:"#4a6080",fontFamily:"'JetBrains Mono',monospace",letterSpacing:"0.1em"}}>ANALYZING...</div>
+ <div style={{fontSize:13,color:loadingMsg==="VERIFYING..."?"#a78bfa":"#4a6080",fontFamily:"'JetBrains Mono',monospace",letterSpacing:"0.1em"}}>{loadingMsg}</div>
+ {loadingMsg==="VERIFYING..." && <div style={{fontSize:10,color:"#6644aa",marginTop:4,fontFamily:"'Noto Serif KR',serif"}}>Devil's Advocate 검증 중...</div>}
  <div style={{display:"flex",justifyContent:"center",gap:6,marginTop:12}}>
- {[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:"#3b82f6",animation:"bounce 0.8s ease-in-out infinite",animationDelay:`${i*0.2}s`}}/>)}
+ {[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:loadingMsg==="VERIFYING..."?"#a78bfa":"#3b82f6",animation:"bounce 0.8s ease-in-out infinite",animationDelay:`${i*0.2}s`}}/>)}
  </div>
  </div>
  )}
@@ -1347,6 +1386,61 @@ function buildSimilarCaseContext(cases) {
 '  }));\n'
 '}\n'
 '\n'
+// --- VERIFICATION PROMPT ------------------------------------------------------
+function buildVerificationPrompt(query, result) {
+ const clauseIds = (result.triggered_clauses || []).map(c => c.clause_id || c.id || "").filter(Boolean).join(", ") || "없음";
+ const conflictIds = (result.related_conflicts || []).map(c => c.id || "").filter(Boolean).join(", ") || "없음";
+ return `당신은 KT 내부 법무팀의 비판적 계약 검토자입니다. 1차 AI 분석을 꼼꼼히 검토하고 오류를 찾아내시오.
+
+【원본 질문】
+${query}
+
+【1차 분석 결과】
+위험도: ${result.risk_level}
+위험 이유: ${result.risk_reason}
+핵심 결론: ${result.bottom_line}
+KT 방어 논거: ${result.kt_defense}
+Palantir 측 논거: ${result.palantir_position}
+인용 조항: ${clauseIds}
+인용 충돌: ${conflictIds}
+
+【검증 체크리스트 — 각 항목 명시적으로 확인】
+① 고객 범위 오류 체크
+- Target Market(금융서비스, Appendix 6 보험사 21개사)에 해당하는 고객인가?
+- Other Market(Appendix 7 13개사 — 포스코 계열, 대한항공, 한화시스템, GS 등)인가?
+- 계약 범위 외 고객에게 SAA-1.3.1/1.3.2 독점권을 잘못 적용했는가?
+
+② EBT 범위 오류 체크
+- EBT(SAA-2.10)가 Target Market 외 고객에게 적용됐는가? → 오류
+
+③ 위험도 기준 적합성 체크
+- HIGH: material breach 가능, 즉각 금전손실, 강행법규 위반, 즉시 정지 트리거
+- MEDIUM: 치유 가능, 협상 여지, 조건 미충족
+- LOW: 직접 위반 아님, 예방적 수준
+- 현재 위험도가 이 기준에 부합하는가? 과잉/과소 판정은 없는가?
+
+④ TOS §8.4 오용 체크
+- Palantir의 즉시 정지권(TOS §8.4)을 KT 방어 수단으로 인용했는가? → 오류
+
+⑤ 충돌 과잉 포함 체크
+- 해지와 무관한 이슈에 XC-005(OF4 잔여 Fee)를 포함했는가? → 오류
+- Target Market 외 이슈에 IC-001(독점 vs EBT)을 포함했는가? → 오류
+
+⑥ 논리적 일관성
+- KT 귀책인데 KT 피해자로 결론지었는가?
+- 적용 조건 미충족 조항을 인용했는가?
+
+【출력 — JSON만, 다른 텍스트 금지】
+{
+ "verdict": "CONFIRMED 또는 REVISED",
+ "issues_found": ["발견 오류 목록, 없으면 []"],
+ "risk_level": "${result.risk_level}",
+ "risk_changed": false,
+ "bottom_line_revised": null,
+ "verification_note": "검증 요약 2-3문장"
+}`;
+}
+
 // --- PROMPT BUILDER -----------------------------------------------------------
 function buildSystemPrompt(mode, amendments=[], hasRawDocs=false, issueType=null, similarCases=[]) {
  const contractDocs = ["SAA","TOS","OF3","OF4"];
@@ -4313,6 +4407,17 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
  <span style={{fontSize:11,fontWeight:800,color:R.color,letterSpacing:"0.12em",fontFamily:"'JetBrains Mono',monospace"}}>{rv}</span>
  <span style={{fontSize:10,color:R.color+"cc"}}>{R.label}</span>
  </div>
+ {result._verification && (
+  <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",
+   background:result._verification.verdict==="REVISED"?"#1a0e2a":"#061a0e",
+   border:`1px solid ${result._verification.verdict==="REVISED"?"#a78bfa44":"#22c55e44"}`,
+   borderRadius:12}}>
+   <span style={{fontSize:9,fontWeight:800,fontFamily:"'JetBrains Mono',monospace",
+    color:result._verification.verdict==="REVISED"?"#a78bfa":"#22c55e",letterSpacing:"0.08em"}}>
+    {result._verification.verdict==="REVISED"?"⚠ 검증 후 수정":"✓ 검증 완료"}
+   </span>
+  </div>
+ )}
  <span style={{fontSize:10,color:"#2d4060",marginLeft:"auto",fontFamily:"'JetBrains Mono',monospace"}}>
  {result.triggered_clauses?.length||0}개 조항 · {result.related_conflicts?.length||0}건 충돌
  </span>
@@ -4345,6 +4450,30 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
  <MiniLabel>Bottom Line</MiniLabel>
  <div style={{fontSize:14,color:"#dce4f0",fontWeight:500,lineHeight:1.65,fontFamily:"'Noto Serif KR',serif"}}>{linkifyClauses(result.bottom_line||"", openClause)}</div>
  </Block>
+
+ {/* 검증 결과 블록 */}
+ {result._verification && (
+ <Block style={{borderColor:result._verification.verdict==="REVISED"?"#a78bfa44":"#22c55e33",background:result._verification.verdict==="REVISED"?"#0e0a1a":"#040e08"}}>
+  <MiniLabel>{result._verification.verdict==="REVISED"?"⚠ 검증 결과 — 수정됨":"✓ 검증 결과 — 이상 없음"}</MiniLabel>
+  {result._verification.risk_changed && (
+   <div style={{fontSize:11,color:"#a78bfa",marginBottom:6,fontFamily:"'JetBrains Mono',monospace"}}>
+    위험도 수정: {result._verification.risk_level_original} → {result._verification.risk_level}
+   </div>
+  )}
+  {result._verification.issues_found?.length > 0 && (
+   <div style={{marginBottom:8}}>
+    {result._verification.issues_found.map((issue,i)=>(
+     <div key={i} style={{fontSize:11,color:"#f87171",lineHeight:1.7,fontFamily:"'Noto Serif KR',serif",paddingLeft:8,borderLeft:"2px solid #ef444444",marginBottom:4}}>
+      {issue}
+     </div>
+    ))}
+   </div>
+  )}
+  <div style={{fontSize:11,color:result._verification.verdict==="REVISED"?"#c4b5fd":"#86efac",lineHeight:1.7,fontFamily:"'Noto Serif KR',serif"}}>
+   {result._verification.verification_note}
+  </div>
+ </Block>
+ )}
 
  {/* 2단: KT vs Palantir */}
  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
