@@ -2436,22 +2436,22 @@ async function requestFullClauseTranslation(data) {
 }
 
 function ClauseDrawer({ clauseId, onClose }) {
- const [tab, setTab] = useState("both"); // 기본: 원문+번역 병기
  const data = CLAUSE_FULLTEXT[clauseId];
- const [fullTranslation, setFullTranslation] = useState(data?.translation || "");
+ const kbClause = CONTRACT_KB.clauses.find(c => c.id === clauseId);
+ const [fullTranslation, setFullTranslation] = useState(data?.translation || kbClause?.translation || "");
  const [translationBusy, setTranslationBusy] = useState(false);
  const [translationErr, setTranslationErr] = useState(null);
  if (!clauseId) return null;
- const docColor = DOC_COLOR[data?.doc] || "#c8d0dc";
+ const docColor = DOC_COLOR[data?.doc || kbClause?.doc] || "#c8d0dc";
+ const ktRisk = data?.kt_risk || kbClause?.kt_risk || data?.context || "";
 
  useEffect(() => {
-  setTab(data?.translation ? "both" : "en");
   setTranslationErr(null);
   const cached = _fullTranslationCache.get(clauseId);
-  const base = cached || data?.translation || "";
+  const base = cached || data?.translation || kbClause?.translation || "";
   setFullTranslation(base);
-    return undefined;
- }, [clauseId, data]);
+  return undefined;
+ }, [clauseId, data, kbClause]);
 
  const hasTranslation = !!fullTranslation;
 
@@ -2459,69 +2459,66 @@ function ClauseDrawer({ clauseId, onClose }) {
   setTranslationErr(null);
   setTranslationBusy(true);
   try {
-   const translated = await requestFullClauseTranslation(data);
+   const translated = await requestFullClauseTranslation(data || kbClause);
    _fullTranslationCache.set(clauseId, translated);
-    CLAUSE_FULLTEXT[clauseId].translation = translated;
-    const bank = Object.fromEntries(_fullTranslationCache);
-    await saveStoredFullTranslations(bank);
+   if (CLAUSE_FULLTEXT[clauseId]) CLAUSE_FULLTEXT[clauseId].translation = translated;
+   const bank = Object.fromEntries(_fullTranslationCache);
+   await saveStoredFullTranslations(bank);
    setFullTranslation(translated);
   } catch (e) {
-   setTranslationErr(e.message || "전문 번역 생성 실패");
+   const msg = e.message || "전문 번역 생성 실패";
+   const friendly = msg.includes("환경변수 미설정")
+    ? "서버 환경변수 미설정 (Vercel: AZURE_OPENAI_ENDPOINT / API_KEY / DEPLOYMENT_NAME 확인 필요)"
+    : msg;
+   setTranslationErr(friendly);
   } finally {
    setTranslationBusy(false);
   }
  };
 
+ const displayData = data || kbClause;
+
  return (
  <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:100,background:"#0a0a14",borderTop:`2px solid ${docColor}44`,boxShadow:"0 -8px 32px #00000088",maxHeight:"75vh",display:"flex",flexDirection:"column"}}>
  <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 20px",borderBottom:"1px solid #1a1a2e",flexShrink:0}}>
- <span style={{fontSize:10,fontWeight:700,color:docColor,background:docColor+"18",padding:"2px 8px",borderRadius:3}}>{data?.doc}</span>
- <span style={{fontSize:11,fontWeight:600,color:"#c8d0dc"}}>{data?.section}</span>
- <span style={{fontSize:12,color:"#e2e8f0",fontWeight:500}}>{data?.title}</span>
- {hasTranslation && (
- <div style={{display:"flex",gap:4,marginLeft:12}}>
- {[["en","English"],["ko","한국어"],["both","병기"]].map(([v,l])=>(
- <button key={v} onClick={()=>setTab(v)} style={{padding:"2px 10px",fontSize:10,borderRadius:3,border:"1px solid "+(tab===v?docColor:"#1e2030"),background:tab===v?docColor+"22":"none",color:tab===v?docColor:"#8899aa",cursor:"pointer",fontFamily:"inherit"}}>{l}</button>
- ))}
- </div>
- )}
+ <span style={{fontSize:10,fontWeight:700,color:docColor,background:docColor+"18",padding:"2px 8px",borderRadius:3}}>{displayData?.doc}</span>
+ <span style={{fontSize:11,fontWeight:600,color:"#c8d0dc"}}>{displayData?.section}</span>
+ <span style={{fontSize:12,color:"#e2e8f0",fontWeight:500}}>{displayData?.title}</span>
  <button onClick={onClose} style={{marginLeft:"auto",background:"none",border:"1px solid #1e2030",borderRadius:4,padding:"3px 10px",fontSize:11,color:"#8899aa",cursor:"pointer",fontFamily:"inherit"}}>{"닫기 ×"}</button>
  </div>
- <div style={{overflowY:"auto",padding:"14px 20px",display:"grid",gridTemplateColumns:(tab==="both"&&hasTranslation)?"1fr 1fr 1fr":"1fr 1fr",gap:16,width:"100%",maxWidth:(tab==="ko"||tab==="en")?800:undefined,margin:(tab==="ko"||tab==="en")?"0 auto":undefined}}>
- {(tab==="en"||tab==="both") && (
+ <div style={{overflowY:"auto",padding:"14px 20px",display:"grid",gridTemplateColumns:hasTranslation?"1fr 1fr 1fr":"1fr 1fr",gap:16,width:"100%"}}>
  <div>
  <div style={{fontSize:10,color:"#6677aa",letterSpacing:"0.08em",marginBottom:8}}>{"조항 원문 (English)"}</div>
- <pre style={{fontSize:11,color:"#c8d0dc",lineHeight:1.8,whiteSpace:"pre-wrap",fontFamily:"'JetBrains Mono',monospace",margin:0,background:"#07070f",padding:"12px 14px",borderRadius:6,border:"1px solid #1a1a2e"}}>{data?.text || "원문 데이터 없음"}</pre>
+ <pre style={{fontSize:11,color:"#c8d0dc",lineHeight:1.8,whiteSpace:"pre-wrap",fontFamily:"'JetBrains Mono',monospace",margin:0,background:"#07070f",padding:"12px 14px",borderRadius:6,border:"1px solid #1a1a2e"}}>{displayData?.text || "원문 데이터 없음"}</pre>
  </div>
- )}
- {(tab==="ko"||tab==="both") && hasTranslation && (
+ {hasTranslation ? (
  <div>
  <div style={{fontSize:10,color:"#6677aa",letterSpacing:"0.08em",marginBottom:8}}>{"한국어 번역"}</div>
  <div style={{fontSize:11,color:"#c8d0dc",lineHeight:1.9,background:"#07070f",padding:"12px 14px",borderRadius:6,border:`1px solid ${docColor}22`}}>
  {renderBoldLines(fullTranslation)}
  </div>
  {translationBusy && <div style={{marginTop:7,fontSize:10,color:"#7db8f7"}}>전문 번역 생성 중...</div>}
- {translationErr && <div style={{marginTop:7,fontSize:10,color:"#f87171"}}>번역 생성 실패: {translationErr}</div>}
+ {translationErr && <div style={{marginTop:7,fontSize:10,color:"#f87171"}}>{translationErr}</div>}
  <button
   onClick={handleRegenerateTranslation}
-  disabled={translationBusy || !data?.text}
-  style={{marginTop:8,fontSize:10,color:docColor,background:docColor+"12",border:`1px solid ${docColor}33`,borderRadius:4,padding:"4px 10px",cursor:(translationBusy || !data?.text)?"not-allowed":"pointer",fontFamily:"inherit",opacity:(translationBusy || !data?.text)?0.6:1}}
+  disabled={translationBusy || !displayData?.text}
+  style={{marginTop:8,fontSize:10,color:docColor,background:docColor+"12",border:`1px solid ${docColor}33`,borderRadius:4,padding:"4px 10px",cursor:(translationBusy || !displayData?.text)?"not-allowed":"pointer",fontFamily:"inherit",opacity:(translationBusy || !displayData?.text)?0.6:1}}
  >
   전문완역 다시 생성
  </button>
  </div>
- )}
- {(tab==="ko"||tab==="both") && !hasTranslation && (
+ ) : (
  <div>
  <div style={{fontSize:10,color:"#6677aa",letterSpacing:"0.08em",marginBottom:8}}>{"한국어 번역"}</div>
  <div style={{fontSize:11,color:"#9aaabb",lineHeight:1.8,background:"#07070f",padding:"12px 14px",borderRadius:6,border:`1px solid ${docColor}22`}}>
  {translationBusy ? "전문 번역 생성 중..." : "번역 데이터 없음"}
  </div>
+ {translationErr && <div style={{marginTop:7,fontSize:10,color:"#f87171"}}>{translationErr}</div>}
  {!translationBusy && (
  <button
   onClick={handleRegenerateTranslation}
-  disabled={!data?.text}
-  style={{marginTop:8,fontSize:10,color:docColor,background:docColor+"12",border:`1px solid ${docColor}33`,borderRadius:4,padding:"4px 10px",cursor:!data?.text?"not-allowed":"pointer",fontFamily:"inherit",opacity:!data?.text?0.6:1}}
+  disabled={!displayData?.text}
+  style={{marginTop:8,fontSize:10,color:docColor,background:docColor+"12",border:`1px solid ${docColor}33`,borderRadius:4,padding:"4px 10px",cursor:!displayData?.text?"not-allowed":"pointer",fontFamily:"inherit",opacity:!displayData?.text?0.6:1}}
  >
   전문완역 생성
  </button>
@@ -2530,7 +2527,7 @@ function ClauseDrawer({ clauseId, onClose }) {
  )}
  <div>
  <div style={{fontSize:10,color:"#6677aa",letterSpacing:"0.08em",marginBottom:8}}>KT 리스크</div>
- <div style={{fontSize:11,color:"#f87171",lineHeight:1.8,background:"#07070f",padding:"12px 14px",borderRadius:6,border:`1px solid ${docColor}22`}}>{data?.kt_risk || data?.context || "-"}</div>
+ <div style={{fontSize:11,color:"#f87171",lineHeight:1.8,background:"#07070f",padding:"12px 14px",borderRadius:6,border:`1px solid ${docColor}22`}}>{ktRisk || "-"}</div>
  </div>
  </div>
  </div>
