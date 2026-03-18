@@ -5012,6 +5012,31 @@ function ClauseTimelineTab({ onOpenClause }) {
  );
 }
 
+// --- CLAUSE HOVER LINK --------------------------------------------------------
+function ClauseHoverLink({ clauseId, children }) {
+ const [hover, setHover] = useState(false);
+ const d = CLAUSE_FULLTEXT[clauseId] || CONTRACT_KB.clauses.find(c => c.id === clauseId);
+ return (
+  <span style={{position:"relative", display:"inline"}}>
+   <span
+    onMouseEnter={()=>setHover(true)}
+    onMouseLeave={()=>setHover(false)}
+    style={{color:"#60a5fa", cursor:"pointer", borderBottom:"1px dashed #60a5fa55", fontWeight:600}}
+   >{children}</span>
+   {hover && d && (
+    <span style={{position:"absolute", bottom:"calc(100% + 8px)", left:"50%", transform:"translateX(-50%)",
+     width:300, background:"#0f172a", border:"1px solid #334155", borderRadius:8, padding:12,
+     zIndex:200, boxShadow:"0 4px 24px rgba(0,0,0,0.6)", display:"block", pointerEvents:"none"}}>
+     <span style={{display:"block", fontSize:10, fontWeight:700, color:"#60a5fa", marginBottom:3}}>{clauseId}</span>
+     {d.title && <span style={{display:"block", fontSize:11, fontWeight:600, color:"#e2e8f0", marginBottom:5}}>{d.title}</span>}
+     <span style={{display:"block", fontSize:11, color:"#94a3b8", lineHeight:1.6}}>{d.core || d.translation || ""}</span>
+     {d.kt_risk && <span style={{display:"block", marginTop:7, paddingTop:7, borderTop:"1px solid #1e293b", fontSize:10, color:"#fcd34d", lineHeight:1.5}}>⚠ {d.kt_risk}</span>}
+    </span>
+   )}
+  </span>
+ );
+}
+
 // --- HURDLE TRACKER -----------------------------------------------------------
 const HURDLE_TARGET = 55000000; // KT가 보유한 라이선스 총량 ($50M 선구매 + $5M 추가)
 const PURCHASE_SCHEDULE = [ // KT → Palantir 연간 선구매 (SAA 고정 스케줄, 합계 $50M)
@@ -5069,8 +5094,26 @@ function HurdleTracker() {
 
  const fmt = (n) => n >= 1000000 ? `$${(n/1000000).toFixed(1)}M` : `$${n.toLocaleString()}`;
 
- const utilizationPct = totalLicense > 0 ? Math.min(100, (totalRevenue / totalLicense) * 100) : 0;
- const utilizationColor = utilizationPct >= 70 ? "#10b981" : utilizationPct >= 40 ? "#f59e0b" : "#ef4444";
+ // -- Hurdle 달성 페이스 계산 --------------------------------------------------
+ const CONTRACT_END = new Date("2030-05-30");
+ const today = new Date();
+ const monthsToEnd = Math.max(1,
+  (CONTRACT_END.getFullYear() - today.getFullYear()) * 12 +
+  (CONTRACT_END.getMonth() - today.getMonth()));
+ const requiredMonthly = remaining > 0 ? remaining / monthsToEnd : 0;
+ const sortedRecs = [...records].sort((a,b) => a.date.localeCompare(b.date));
+ const firstDate = sortedRecs.length > 0 ? new Date(sortedRecs[0].date) : null;
+ const monthsElapsed = firstDate
+  ? Math.max(1, (today.getFullYear()-firstDate.getFullYear())*12+(today.getMonth()-firstDate.getMonth())+1)
+  : 0;
+ const currentPace = monthsElapsed > 0 && totalRevenue > 0 ? totalRevenue / monthsElapsed : 0;
+ const projectedDate = currentPace > 0 && remaining > 0
+  ? new Date(today.getFullYear(), today.getMonth() + Math.ceil(remaining / currentPace), 1)
+  : remaining <= 0 ? today : null;
+ const projectedStr = projectedDate
+  ? `${projectedDate.getFullYear()}.${String(projectedDate.getMonth()+1).padStart(2,"0")}`
+  : "–";
+ const onTrack = projectedDate && projectedDate <= CONTRACT_END;
 
  const addOrUpdate = async () => {
  if (!form.date || !form.yearlyAmounts.length) return;
@@ -5187,60 +5230,52 @@ function HurdleTracker() {
  </div>
  </div>
 
- {/* 라이선스 소진 현황 */}
+ {/* Hurdle 달성 페이스 분석 */}
  <div style={{marginBottom:16, background:"#020617", border:"1px solid #334155", borderRadius:8, padding:16}}>
- <div style={{fontSize:10, color:"#94a3b8", fontWeight:600, marginBottom:12}}>라이선스 소진 현황</div>
+ <div style={{fontSize:10, color:"#94a3b8", fontWeight:600, marginBottom:12}}>Hurdle 달성 페이스 분석</div>
 
- {/* 3개 핵심 지표 */}
- <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:14}}>
+ {/* 상단 3개 지표 — 항상 표시 */}
+ <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom: currentPace>0 ? 10 : 0}}>
   <div style={{background:"#1e293b", borderRadius:6, padding:"10px 12px"}}>
-   <div style={{fontSize:10, color:"#64748b", marginBottom:4}}>확보 라이선스</div>
-   <div style={{fontSize:15, fontWeight:700, color:"#a78bfa"}}>{fmt(totalLicense)}</div>
-   <div style={{fontSize:10, color:"#475569", marginTop:2}}>{Object.values(purchased).filter(Boolean).length}개년 선구매 완료</div>
+   <div style={{fontSize:10, color:"#64748b", marginBottom:4}}>잔여 목표</div>
+   <div style={{fontSize:15, fontWeight:700, color:riskColor}}>{remaining > 0 ? fmt(remaining) : "달성 완료"}</div>
+   <div style={{fontSize:10, color:"#475569", marginTop:2}}>Hurdle {fmt(HURDLE_TARGET)} 기준</div>
   </div>
   <div style={{background:"#1e293b", borderRadius:6, padding:"10px 12px"}}>
-   <div style={{fontSize:10, color:"#64748b", marginBottom:4}}>재판매 실적</div>
-   <div style={{fontSize:15, fontWeight:700, color:"#60a5fa"}}>{fmt(totalRevenue)}</div>
-   <div style={{fontSize:10, color:"#475569", marginTop:2}}>소진율 {totalLicense>0?`${utilizationPct.toFixed(1)}%`:"–"}</div>
+   <div style={{fontSize:10, color:"#64748b", marginBottom:4}}>잔여 기간</div>
+   <div style={{fontSize:15, fontWeight:700, color:"#cbd5e1"}}>{monthsToEnd}개월</div>
+   <div style={{fontSize:10, color:"#475569", marginTop:2}}>2030.05.30 만료</div>
   </div>
-  <div style={{background:"#1e293b", borderRadius:6, padding:"10px 12px", border:`1px solid ${unusedLicense>15000000?"#ef444422":"#334155"}`}}>
-   <div style={{fontSize:10, color:"#64748b", marginBottom:4}}>현금 노출</div>
-   <div style={{fontSize:15, fontWeight:700, color:unusedLicense>15000000?"#ef4444":"#94a3b8"}}>{fmt(unusedLicense)}</div>
-   <div style={{fontSize:10, color:"#475569", marginTop:2}}>선구매 후 미회수</div>
-  </div>
- </div>
-
- {/* 전체 소진 바 */}
- <div style={{height:22, borderRadius:4, overflow:"hidden", background:"#1e293b", display:"flex", marginBottom:6}}>
-  <div style={{width:`${Math.min(100,(totalRevenue/HURDLE_TARGET)*100)}%`, background:"linear-gradient(90deg,#60a5fa88,#60a5fa)", transition:"width 0.4s", minWidth: totalRevenue>0?2:0}}/>
-  <div style={{width:`${Math.min(100,(Math.max(0,totalLicense-totalRevenue)/HURDLE_TARGET)*100)}%`, background:"#ef444428", borderLeft: totalRevenue>0?"1px solid #ef444444":"none", transition:"width 0.4s"}}/>
- </div>
- <div style={{display:"flex", gap:14, fontSize:10, color:"#475569", marginBottom:14}}>
-  <span><span style={{color:"#60a5fa"}}>■</span> 재판매 {fmt(totalRevenue)}</span>
-  <span><span style={{color:"#ef4444", opacity:0.6}}>■</span> 현금노출 {fmt(unusedLicense)}</span>
-  <span style={{marginLeft:"auto"}}>/ {fmt(HURDLE_TARGET)}</span>
- </div>
-
- {/* Y1~Y5 선구매 행 */}
- <div style={{display:"flex", flexDirection:"column", gap:5}}>
-  {PURCHASE_SCHEDULE.map(p=>{
-   const done = !!purchased[p.year];
-   const yr = startYear + p.year - 1;
-   const barPct = ((p.amount + p.bonus) / HURDLE_TARGET) * 100;
-   return (
-   <div key={p.year} style={{display:"flex", alignItems:"center", gap:8}}>
-    <span style={{width:24, fontSize:10, color:done?"#a78bfa":"#334155", fontWeight:600, flexShrink:0}}>{p.label}</span>
-    <div style={{flex:1, height:10, background:"#0f172a", borderRadius:3, overflow:"hidden"}}>
-     <div style={{height:"100%", width:`${barPct}%`, background:done?"#a78bfa44":"#33415533", borderRadius:3, transition:"width 0.4s"}}/>
-    </div>
-    <span style={{width:90, fontSize:10, color:done?"#a78bfa":"#475569", textAlign:"right", flexShrink:0}}>
-     {fmt(p.amount)}{p.bonus>0?` +${fmt(p.bonus)}`:""}
-    </span>
-    <span style={{width:44, fontSize:10, color:done?"#34d399":"#334155", textAlign:"right", flexShrink:0}}>{done?"완료":`${yr}년`}</span>
+  <div style={{background:"#1e293b", borderRadius:6, padding:"10px 12px", border:`1px solid ${currentPace>0 && !onTrack?"#ef444422":"#334155"}`}}>
+   <div style={{fontSize:10, color:"#64748b", marginBottom:4}}>필요 월 Revenue</div>
+   <div style={{fontSize:15, fontWeight:700, color: currentPace>0 && currentPace<requiredMonthly?"#ef4444":"#f59e0b"}}>
+    {remaining > 0 ? `${fmt(Math.ceil(requiredMonthly))}/월` : "–"}
    </div>
-   );
-  })}
+   <div style={{fontSize:10, color:"#475569", marginTop:2}}>잔여 ÷ 잔여기간</div>
+  </div>
  </div>
+
+ {/* 실적 있을 때 — 현재 페이스 vs 달성 예상 */}
+ {currentPace > 0 && (
+  <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:10}}>
+   <div style={{background:"#1e293b", borderRadius:6, padding:"10px 12px"}}>
+    <div style={{fontSize:10, color:"#64748b", marginBottom:4}}>현재 페이스</div>
+    <div style={{fontSize:14, fontWeight:700, color:"#60a5fa"}}>{fmt(Math.ceil(currentPace))}/월</div>
+    <div style={{fontSize:10, marginTop:2, color: currentPace >= requiredMonthly ? "#10b981" : "#ef4444"}}>
+     {currentPace >= requiredMonthly ? "▲ 필요 페이스 초과" : `▼ ${fmt(Math.ceil(requiredMonthly - currentPace))}/월 부족`}
+    </div>
+   </div>
+   <div style={{background:"#1e293b", borderRadius:6, padding:"10px 12px"}}>
+    <div style={{fontSize:10, color:"#64748b", marginBottom:4}}>달성 예상 시점</div>
+    <div style={{fontSize:14, fontWeight:700, color: remaining<=0?"#10b981": onTrack?"#10b981":"#ef4444"}}>
+     {remaining<=0 ? "달성 완료" : projectedStr}
+    </div>
+    <div style={{fontSize:10, color:"#475569", marginTop:2}}>
+     {remaining<=0 ? "Hurdle 충족" : onTrack ? "기간 내 달성 가능" : "⚠ 2030.05 초과 예상"}
+    </div>
+   </div>
+  </div>
+ )}
  </div>
 
  {/* 입력 폼 */}
@@ -5411,14 +5446,23 @@ function HurdleTracker() {
  border:`1px solid ${riskColor}33`,borderRadius:8}}>
  <div style={{fontSize:10,color:riskColor,fontWeight:700,marginBottom:6}}>⚖️ Hurdle 리스크 분석 (SAA §6.3)</div>
  <div style={{fontSize:10,color:"#94a3b8",lineHeight:1.8}}>
- {riskLevel==="달성"
- ? `Hurdle ${fmt(HURDLE_TARGET)} 달성. 계약 해지 시에도 SAA §6.3에 따라 Surviving QRC 수익 배분 협상 권리 보유.`
- : riskLevel==="LOW"
- ? `${pct.toFixed(1)}% 달성 — 잔여 ${fmt(remaining)} 추가 확보 시 Hurdle 충족 가능.`
- : riskLevel==="MEDIUM"
- ? `${pct.toFixed(1)}% 달성 — 잔여 ${fmt(remaining)} 미확보 시 해지 후 SAA §6.3 협상에서 KT 협상력 약화 우려.`
- : `${pct.toFixed(1)}% 달성 — 목표 대비 현저히 부족. Hurdle 미달성 해지 시 Surviving QRC 수익이 KT에 불리하게 배분될 리스크 HIGH.`
- }
+ {riskLevel==="달성" ? <>
+  Hurdle {fmt(HURDLE_TARGET)} 달성. 계약 해지 시에도{" "}
+  <ClauseHoverLink clauseId="SAA-6.3">SAA §6.3</ClauseHoverLink>에 따라
+  Surviving QRC 수익 배분 협상 권리 보유.
+ </> : riskLevel==="LOW" ? <>
+  {pct.toFixed(1)}% 달성 — 잔여 {fmt(remaining)} 추가 확보 시 Hurdle 충족 가능.
+ </> : riskLevel==="MEDIUM" ? <>
+  {pct.toFixed(1)}% 달성 — 잔여 {fmt(remaining)} 미확보 시 해지 후{" "}
+  <ClauseHoverLink clauseId="SAA-6.3">SAA §6.3</ClauseHoverLink> 협상에서 KT 협상력 약화 우려.
+  Surviving QRC 수익은{" "}
+  <ClauseHoverLink clauseId="SAA-2.11">SAA §2.11</ClauseHoverLink>에 따라 KT 10% 고정 배분 위험.
+ </> : <>
+  {pct.toFixed(1)}% 달성 — 목표 대비 현저히 부족. Hurdle 미달성 해지 시{" "}
+  <ClauseHoverLink clauseId="SAA-2.11">SAA §2.11</ClauseHoverLink>에 따라
+  Surviving QRC 수익이 KT 10% / Palantir 90%로 고정 배분될 리스크 HIGH.
+  <ClauseHoverLink clauseId="SAA-6.3">SAA §6.3</ClauseHoverLink> 협상권 선제 확보 필요.
+ </>}
  </div>
  </div>
  )}
