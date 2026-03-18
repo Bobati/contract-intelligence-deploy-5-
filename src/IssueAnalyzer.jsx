@@ -1,4 +1,20 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Component } from "react";
+
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(e) { return { error: e }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{padding:"20px",background:"#1a0808",border:"1px solid #ef444433",borderRadius:8,margin:"12px 0",fontFamily:"monospace"}}>
+          <div style={{color:"#f87171",fontWeight:700,marginBottom:8}}>렌더링 오류 (개발자용)</div>
+          <pre style={{color:"#fca5a5",fontSize:11,whiteSpace:"pre-wrap",wordBreak:"break-all"}}>{this.state.error?.message}{"\n"}{this.state.error?.stack}</pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ------------------------------------------------------------------------------
 // ------------------------------------------------------------------------------
@@ -490,7 +506,7 @@ export default function IssueAnalyzer() {
  <span style={{fontSize:12,color:"#7a9abf",background:"#0b1120",border:"1px solid #1c2840",borderRadius:4,padding:"2px 10px",fontFamily:"'Noto Serif KR',serif",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{current.query}</span>
  <span style={{fontSize:9,fontWeight:700,color:current.mode==="extended"?"#c084fc":"#7db8f7",background:current.mode==="extended"?"#1e105044":"#1a2e4a",border:`1px solid ${current.mode==="extended"?"#c084fc33":"#3b82f633"}`,borderRadius:3,padding:"2px 8px",fontFamily:"'JetBrains Mono',monospace"}}>{current.mode==="extended"?"확장":"기본"}</span>
  </div>
- <AnalysisResult result={current.result} query={current.query} mode={current.mode} amendments={amendments} onOpenClause={setGlobalViewingClause}/>
+ <ErrorBoundary><AnalysisResult result={current.result} query={current.query} mode={current.mode} amendments={amendments} onOpenClause={setGlobalViewingClause}/></ErrorBoundary>
  </div>
  )}
  {!current && !loading && (
@@ -5464,7 +5480,7 @@ function HistoryTab({ history, onSelect, onDelete, onUpdateMemo, onClear }) {
  📝 {selected.memo}
  </div>
  )}
- <AnalysisResult result={selected.result} query={selected.query} mode={selected.mode} amendments={[]}/>
+ <ErrorBoundary><AnalysisResult result={selected.result} query={selected.query} mode={selected.mode} amendments={[]}/></ErrorBoundary>
  </div>
  ) : (
  <div style={{display:"flex", flexDirection:"column", alignItems:"center",
