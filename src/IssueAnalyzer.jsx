@@ -487,11 +487,6 @@ export default function IssueAnalyzer() {
       </div>
      </div>
 
-     <div style={{padding:"10px 16px",borderBottom:"1px solid #334155"}}>
-      <div style={{fontSize:11,color:"#64748b",lineHeight:1.7,border:"1px solid #334155",borderRadius:6,padding:"8px 10px",background:"#1e293b"}}>
-       Amendment 업로드는 문서 관리 탭에서만 지원됩니다.
-      </div>
-     </div>
 
      {/* 샘플 이슈 */}
      <div style={{padding:"10px 16px",borderBottom:"1px solid #334155"}}>
