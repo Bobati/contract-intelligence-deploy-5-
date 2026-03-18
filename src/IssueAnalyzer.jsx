@@ -1430,11 +1430,12 @@ function buildSimilarCaseContext(cases) {
 '}\n'
 '\n'
 
-// --- HURDLE SNAPSHOT (localStorage → 프롬프트 주입용) -------------------------
+// --- HURDLE SNAPSHOT (storage → 프롬프트 주입용) -------------------------
 function readHurdleSnapshot() {
  try {
-  const s1 = localStorage.getItem("hurdle_data_v3");
-  const s2 = localStorage.getItem("hurdle_purchase_v1");
+  // _memStore는 storage.set 시 항상 동기 업데이트 → Supabase 로드 후에도 최신값 반영
+  const s1 = _memStore.get("hurdle_data_v3") || localStorage.getItem("hurdle_data_v3");
+  const s2 = _memStore.get("hurdle_purchase_v1") || localStorage.getItem("hurdle_purchase_v1");
   const { records = [], startYear = 2025 } = s1 ? JSON.parse(s1) : {};
   const purchased = s2 ? JSON.parse(s2) : {};
   if (records.length === 0 && !Object.values(purchased).some(Boolean)) return null;
@@ -5472,23 +5473,25 @@ function HurdleTracker() {
  const [editId, setEditId] = useState(null);
 
  useEffect(() => {
- try {
-  const s1 = localStorage.getItem(STORAGE_KEY);
-  if (s1) {
-   const parsed = JSON.parse(s1);
-   setRecords(parsed.records || []);
-   setStartYear(parsed.startYear || 2025);
-  }
-  const s2 = localStorage.getItem(PURCHASE_KEY);
-  if (s2) setPurchased(JSON.parse(s2));
- } catch(e) {}
+  (async () => {
+   try {
+    const s1 = await storage.get(STORAGE_KEY);
+    if (s1) {
+     const parsed = typeof s1 === "string" ? JSON.parse(s1) : s1;
+     setRecords(parsed.records || []);
+     setStartYear(parsed.startYear || 2025);
+    }
+    const s2 = await storage.get(PURCHASE_KEY);
+    if (s2) setPurchased(typeof s2 === "string" ? JSON.parse(s2) : s2);
+   } catch(e) {}
+  })();
  }, []);
 
- const saveRecords = (recs, sy) => {
- try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ records: recs, startYear: sy })); } catch(e) {}
+ const saveRecords = async (recs, sy) => {
+  try { await storage.set(STORAGE_KEY, JSON.stringify({ records: recs, startYear: sy })); } catch(e) {}
  };
- const savePurchased = (p) => {
- try { localStorage.setItem(PURCHASE_KEY, JSON.stringify(p)); } catch(e) {}
+ const savePurchased = async (p) => {
+  try { await storage.set(PURCHASE_KEY, JSON.stringify(p)); } catch(e) {}
  };
 
  // -- Revenue 실적 계산 ------------------------------------------------------
