@@ -1433,6 +1433,66 @@ Palantir 측 논거: ${result.palantir_position}
 }`;
 }
 
+// --- HURDLE SNAPSHOT (localStorage → 프롬프트 주입용) -------------------------
+function readHurdleSnapshot() {
+ try {
+  const s1 = localStorage.getItem("hurdle_data_v3");
+  const s2 = localStorage.getItem("hurdle_purchase_v1");
+  const { records = [], startYear = 2025 } = s1 ? JSON.parse(s1) : {};
+  const purchased = s2 ? JSON.parse(s2) : {};
+  if (records.length === 0 && !Object.values(purchased).some(Boolean)) return null;
+  const fmtM = (n) => n >= 1000000 ? `$${(n/1000000).toFixed(1)}M` : `$${n.toLocaleString()}`;
+  const totalRevenue = records.reduce((s, r) => s + (r.amount || 0), 0);
+  const HURDLE = 55000000;
+  const SCHED = [
+   { year:1, amount:8000000,  bonus:0,       label:"Y1" },
+   { year:2, amount:10000000, bonus:0,       label:"Y2" },
+   { year:3, amount:10000000, bonus:0,       label:"Y3" },
+   { year:4, amount:11000000, bonus:0,       label:"Y4" },
+   { year:5, amount:11000000, bonus:5000000, label:"Y5" },
+  ];
+  const remaining = Math.max(0, HURDLE - totalRevenue);
+  const pct = Math.min(100, (totalRevenue / HURDLE) * 100);
+  const purchasedList = SCHED.filter(p => purchased[p.year]);
+  const unpurchasedList = SCHED.filter(p => !purchased[p.year]);
+  const CONTRACT_END = new Date("2030-05-30");
+  const today = new Date();
+  const monthsToEnd = Math.max(1,
+   (CONTRACT_END.getFullYear()-today.getFullYear())*12+(CONTRACT_END.getMonth()-today.getMonth()));
+  const requiredMonthly = remaining > 0 ? remaining / monthsToEnd : 0;
+  const sorted = [...records].sort((a,b)=>a.date.localeCompare(b.date));
+  const firstDate = sorted.length > 0 ? new Date(sorted[0].date) : null;
+  const monthsElapsed = firstDate
+   ? Math.max(1,(today.getFullYear()-firstDate.getFullYear())*12+(today.getMonth()-firstDate.getMonth())+1)
+   : 0;
+  const currentPace = monthsElapsed > 0 && totalRevenue > 0 ? totalRevenue / monthsElapsed : 0;
+
+  let note = `\n\n【Hurdle 달성 현황 — 실시간 실적 데이터 (허들 탭 입력 기준)】\n`;
+  note += `총 실적: ${fmtM(totalRevenue)} / Hurdle $55M의 ${pct.toFixed(1)}% 달성\n`;
+  note += `잔여 목표: ${fmtM(remaining)} / 잔여 기간: ${monthsToEnd}개월 (2030.05.30 만료)\n`;
+  note += `필요 월 Revenue: ${fmtM(Math.ceil(requiredMonthly))}/월`;
+  if (currentPace > 0) note += ` | 현재 페이스: ${fmtM(Math.ceil(currentPace))}/월 (${currentPace >= requiredMonthly ? "목표 달성 가능" : "페이스 부족"})`;
+  note += `\n`;
+  if (purchasedList.length > 0) {
+   note += `선구매 완료(${startYear}년 기준): `+purchasedList.map(p=>`${p.label}(${startYear+p.year-1}년 ${fmtM(p.amount)})`).join("·")+`\n`;
+  }
+  if (unpurchasedList.length > 0) {
+   note += `선구매 미완료: `+unpurchasedList.map(p=>`${p.label}(${startYear+p.year-1}년 ${fmtM(p.amount)})`).join("·")+`\n`;
+  }
+  if (records.length > 0) {
+   note += `개별 Revenue 실적 (${records.length}건):\n`;
+   for (const r of sorted.slice(0,15)) {
+    note += `  · ${r.date} ${r.customer||"미상"} [${r.customerType||""}] ${fmtM(r.amount)}`;
+    if (r.note) note += ` — ${r.note}`;
+    note += `\n`;
+   }
+   if (records.length > 15) note += `  ... 외 ${records.length-15}건\n`;
+  }
+  note += `▶ Hurdle 달성 여부·수익 배분·연체·해지 관련 이슈 분석 시 위 수치를 반드시 인용하여 답변하시오.\n`;
+  return note;
+ } catch(e) { return null; }
+}
+
 // --- PROMPT BUILDER -----------------------------------------------------------
 function buildSystemPrompt(mode, amendments=[], hasRawDocs=false, issueType=null, similarCases=[]) {
  const contractDocs = ["SAA","TOS","OF3","OF4"];
@@ -1483,6 +1543,7 @@ ${extNote}
 ${hasRawDocs ? "【원문 첨부】위 messages에 계약서 원문이 첨부되어 있습니다. 조항 분석 시 반드시 원문을 직접 참조하십시오. 아래 조항 요약은 참고용입니다." : ""}
 문서 우선순위: Order Form > SAA > TOS
 Hurdle: USD 55,000,000 / OF3: USD 9,000,000 / OF4: USD 27,000,000 (편의해지 불가)
+${readHurdleSnapshot()||""}
 
 --------------------------------------------------
 분석 전 의무 체크리스트 — 조항 적용 전 반드시 4가지 확인
@@ -1883,7 +1944,7 @@ function buildFollowupPrompt(mode, analysisResult, chatHistory, amendments=[], i
   ? "\n\n현재 적용 중인 Amendment:\n" + amendments.map(a => "["+a.docType+"] "+a.fileName+": "+a.changes.map(c=>c.clauseId+" "+c.changeType).join(", ")).join("\n")
   : "";
  return `당신은 KT와 Palantir Korea LLC 간의 계약 리스크 분석 전문가입니다. ${extNote}${amendNote}${focusNote}
-
+${readHurdleSnapshot()||""}
 
 
 
