@@ -79,6 +79,34 @@ const storage = {
  },
 };
 
+const ISSUE_TEMPLATES = [
+ {
+  label: "계약 위반",
+  emoji: "⚠",
+  text: `Palantir가 [언제부터] [어떤 의무]를 이행하지 않고 있다.\nKT는 [원하는 결과: 예) 즉시 이행 요구 / 손해배상 청구]를 원한다.`,
+ },
+ {
+  label: "대금·이행",
+  emoji: "💰",
+  text: `Palantir가 [금액 또는 조건]을 요구하고 있다.\nKT는 이 요구가 [이유]로 부당하다고 생각하며, [원하는 결과]를 원한다.`,
+ },
+ {
+  label: "해지·종료",
+  emoji: "🔚",
+  text: `[KT / Palantir]가 계약 해지를 [통보했다 / 검토 중이다].\n배경은 [상황 설명]이며, KT는 [원하는 결과: 예) 해지 무효 / 위약금 청구]를 원한다.`,
+ },
+ {
+  label: "IP·데이터",
+  emoji: "🔒",
+  text: `[데이터 / 소프트웨어 / IP] 관련 분쟁이 발생했다.\nPalantir가 [상황: 예) 무단 사용 / 접근 거부]하고 있으며, KT는 [원하는 결과]를 원한다.`,
+ },
+ {
+  label: "손해배상",
+  emoji: "⚖",
+  text: `Palantir의 [행위 또는 불이행]으로 KT에 [피해 내용]이 발생했다.\n배상 청구 또는 협의 방안을 검토하고 싶다.`,
+ },
+];
+
 export default function IssueAnalyzer() {
  const [sessionCode, setSessionCode] = useState(SESSION_ID);
  const [sessionReady, setSessionReady] = useState(!!SESSION_ID);
@@ -219,18 +247,60 @@ export default function IssueAnalyzer() {
   } catch(e) { /* URL fetch 실패 시 원본 쿼리 사용 */ }
  }
  userContent[userContent.length - 1] = { type: "text", text: finalQuery };
- const res = await fetch("/api/chat",{
- method:"POST", headers:{"Content-Type":"application/json"},
- body: JSON.stringify({
- max_tokens:4096,
- system:buildSystemPrompt(mode, amendments, rawItems.length > 0, issueType, findSimilarCases(history, issueType, null)),
- messages:[{role:"user", content: userContent.length > 1 ? userContent : query}]
- })
+// ── Stage 1: 병렬 — KT 변호인 + Palantir 변호인 ─────────────────
+ setLoadingMsg("ANALYZING...");
+ const ktContent = userContent.length > 1 ? userContent : finalQuery;
+ const [ktRes, palantirRes] = await Promise.all([
+  fetch("/api/chat", {
+   method: "POST", headers: {"Content-Type": "application/json"},
+   body: JSON.stringify({
+    max_tokens: 2000,
+    system: buildKTLawyerPrompt(mode, amendments, rawItems.length > 0, issueType),
+    messages: [{role: "user", content: ktContent}]
+   })
+  }),
+  fetch("/api/chat", {
+   method: "POST", headers: {"Content-Type": "application/json"},
+   body: JSON.stringify({
+    max_tokens: 1200,
+    messages: [{role: "user", content: buildPalantirLawyerPrompt(finalQuery, issueType)}]
+   })
+  })
+ ]);
+
+ const safeParseJSON = (text, fallback={}) => {
+  const j = text.indexOf('{'), je = text.lastIndexOf('}');
+  if (j === -1 || je === -1) return fallback;
+  try { return JSON.parse(text.slice(j, je+1)); } catch(e) { return fallback; }
+ };
+
+ let ktStrategy = { defense_summary:"", leverage_points:[], favorable_interpretations:[], procedural_defenses:[], preemptive_actions:[], relevant_clauses:[], kt_core_argument:"" };
+ if (ktRes.ok) {
+  const ktData = await ktRes.json();
+  const ktText = (ktData.content || []).map(c => c.text || "").join("").trim();
+  ktStrategy = { ...ktStrategy, ...safeParseJSON(ktText) };
+ }
+
+ let palantirCase = { strongest_arguments:[], clause_basis:[], kt_weaknesses:[], counter_strategy:"" };
+ if (palantirRes.ok) {
+  const palantirData = await palantirRes.json();
+  const palantirText = (palantirData.content || []).map(c => c.text || "").join("").trim();
+  palantirCase = { ...palantirCase, ...safeParseJSON(palantirText) };
+ }
+
+ // ── Stage 2: 판사 심의 ────────────────────────────────────────────
+ setLoadingMsg("DELIBERATING...");
+ const judgeRes = await fetch("/api/chat", {
+  method: "POST", headers: {"Content-Type": "application/json"},
+  body: JSON.stringify({
+   max_tokens: 4096,
+   messages: [{role: "user", content: buildJudgePrompt(finalQuery, ktStrategy, palantirCase, mode, issueType, findSimilarCases(history, issueType, null))}]
+  })
  });
- if (!res.ok) { const t=await res.text(); throw new Error("API "+res.status+": "+t); }
- const data = await res.json();
- if (data.error) throw new Error(data.error.message||JSON.stringify(data.error));
- const text = data.content?.map(b=>b.text||"").join("").trim();
+ if (!judgeRes.ok) { const t = await judgeRes.text(); throw new Error("API " + judgeRes.status + ": " + t); }
+ const judgeData = await judgeRes.json();
+ if (judgeData.error) throw new Error(judgeData.error.message || JSON.stringify(judgeData.error));
+ const text = (judgeData.content || []).map(c => c.text || "").join("").trim();
  if (!text) throw new Error("빈 응답");
 
  const _js = text.indexOf('{'), _je = text.lastIndexOf('}');
@@ -239,81 +309,46 @@ export default function IssueAnalyzer() {
  let parsed;
  try { parsed = JSON.parse(jsonStr); }
  catch(e) {
- let fixed = jsonStr;
-  // quoteCount check removed (lookbehind not supported)
-  if (false) fixed += '"';
- const opens = (fixed.match(/[{[]/g) || []).length;
- const closes = (fixed.match(/[}\]]/g) || []).length;
- const diff = opens - closes;
- const lastObj = fixed.lastIndexOf('},');
- if (lastObj > 0) fixed = fixed.slice(0, lastObj+1);
- for (let i=0; i<diff; i++) fixed += (i===diff-1 ? '}' : ']');
- if (!fixed.includes('immediate_actions')) {
- fixed = fixed.replace(/}\s*$/, ', "immediate_actions": []}');
+  let fixed = jsonStr;
+  const opens = (fixed.match(/[{[]/g) || []).length;
+  const closes = (fixed.match(/[}]]/g) || []).length;
+  const diff = opens - closes;
+  const lastObj = fixed.lastIndexOf('},');
+  if (lastObj > 0) fixed = fixed.slice(0, lastObj+1);
+  for (let i=0; i<diff; i++) fixed += (i===diff-1 ? '}' : ']');
+  if (!fixed.includes('immediate_actions')) {
+   fixed = fixed.replace(/}s*$/, ', "immediate_actions": []}');
+  }
+  try { parsed = JSON.parse(fixed); }
+  catch(e2) { throw new Error('JSON 파싱 실패: ' + e.message); }
  }
- try { parsed = JSON.parse(fixed); }
- catch(e2) { throw new Error('JSON 파싱 실패: ' + e.message); }
- }
- 
+
  const toStr = (v, fallback='-') => {
-   if (!v) return fallback;
-   if (typeof v === 'string') return v;
-   if (Array.isArray(v)) return v.join('\n');
-   return String(v);
+  if (!v) return fallback;
+  if (typeof v === 'string') return v;
+  if (Array.isArray(v)) return v.join('\n');
+  return String(v);
  };
  const result = {
- situation_summary: toStr(parsed.situation_summary, query),
- risk_level: ['HIGH','MEDIUM','LOW'].includes((parsed.risk_level||'').toUpperCase()) ? parsed.risk_level.toUpperCase() : 'MEDIUM',
- risk_reason: toStr(parsed.risk_reason),
- legal_analysis: toStr(parsed.legal_analysis),
- kt_defense: toStr(parsed.kt_defense),
- palantir_position: toStr(parsed.palantir_position),
- bottom_line: toStr(parsed.bottom_line),
- related_conflicts: Array.isArray(parsed.related_conflicts)
-  ? parsed.related_conflicts.map(rc => typeof rc === "string"
-    ? { id: rc, relevance_level: "중", relevance_reason: "" }
-    : rc)
-  : [],
- triggered_clauses: Array.isArray(parsed.triggered_clauses) ? parsed.triggered_clauses : [],
- immediate_actions: Array.isArray(parsed.immediate_actions) ? parsed.immediate_actions : [],
- _issueType: issueType,
+  situation_summary: toStr(parsed.situation_summary, query),
+  risk_level: ['HIGH','MEDIUM','LOW'].includes((parsed.risk_level||'').toUpperCase()) ? parsed.risk_level.toUpperCase() : 'MEDIUM',
+  risk_reason: toStr(parsed.risk_reason),
+  legal_analysis: toStr(parsed.legal_analysis),
+  kt_defense: toStr(parsed.kt_defense),
+  palantir_position: toStr(parsed.palantir_position),
+  bottom_line: toStr(parsed.bottom_line),
+  related_conflicts: Array.isArray(parsed.related_conflicts)
+   ? parsed.related_conflicts.map(rc => typeof rc === "string"
+     ? { id: rc, relevance_level: "중", relevance_reason: "" }
+     : rc)
+   : [],
+  triggered_clauses: Array.isArray(parsed.triggered_clauses) ? parsed.triggered_clauses : [],
+  immediate_actions: Array.isArray(parsed.immediate_actions) ? parsed.immediate_actions : [],
+  _issueType: issueType,
+  _ktStrategy: ktStrategy,
+  _palantirCase: palantirCase,
  };
 
- // ── 2차 Devil's Advocate 검증 ──────────────────────────────────
- setLoadingMsg("VERIFYING...");
- let verification = { verdict: "CONFIRMED", issues_found: [], risk_changed: false, verification_note: "" };
- try {
-  const vPrompt = buildVerificationPrompt(query, result);
-  const vRes = await fetch("/api/chat", {
-   method: "POST", headers: { "Content-Type": "application/json" },
-   body: JSON.stringify({ max_tokens: 1200, messages: [{ role: "user", content: vPrompt }] })
-  });
-  if (vRes.ok) {
-   const vData = await vRes.json();
-   const vText = (vData.content || []).map(c => c.text || "").join("").trim();
-   const vj = vText.indexOf('{'), vje = vText.lastIndexOf('}');
-   if (vj !== -1 && vje !== -1) {
-    const vParsed = JSON.parse(vText.slice(vj, vje + 1));
-    verification = {
-     verdict: vParsed.verdict === "REVISED" ? "REVISED" : "CONFIRMED",
-     issues_found: Array.isArray(vParsed.issues_found) ? vParsed.issues_found : [],
-     risk_changed: !!vParsed.risk_changed,
-     risk_level_original: result.risk_level,
-     risk_level: ['HIGH','MEDIUM','LOW'].includes((vParsed.risk_level||'').toUpperCase()) ? vParsed.risk_level.toUpperCase() : result.risk_level,
-     bottom_line_revised: vParsed.bottom_line_revised || null,
-     verification_note: toStr(vParsed.verification_note),
-    };
-    if (verification.risk_changed && verification.risk_level !== result.risk_level) {
-     result.risk_level = verification.risk_level;
-    }
-    if (verification.bottom_line_revised) {
-     result.bottom_line = verification.bottom_line_revised;
-    }
-   }
-  }
- } catch(ve) { /* 검증 실패 시 원본 결과 유지 */ }
- result._verification = verification;
- // ─────────────────────────────────────────────────────────────
 
  const entry={id:Date.now(),query,result,mode,ts:new Date().toLocaleString("ko-KR")};
  const nh=[entry,...history];
@@ -466,12 +501,28 @@ export default function IssueAnalyzer() {
 
      {/* 입력 영역 */}
      <div style={{padding:"14px 16px",borderBottom:"1px solid #334155"}}>
-      <div style={{fontSize:10,fontWeight:600,color:"#64748b",letterSpacing:"0.1em",marginBottom:8,textTransform:"uppercase"}}>Situation Input</div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:7}}>
+       <div style={{fontSize:10,fontWeight:600,color:"#64748b",letterSpacing:"0.1em",textTransform:"uppercase"}}>Situation Input</div>
+       <div style={{fontSize:9,color:"#475569"}}>템플릿 선택</div>
+      </div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+       {ISSUE_TEMPLATES.map(t=>(
+        <button key={t.label} onClick={()=>setInput(t.text)}
+         title={t.label+" 템플릿으로 채우기"}
+         style={{padding:"3px 9px",background:"#1e293b",border:"1px solid #334155",borderRadius:4,
+          fontSize:10,color:"#94a3b8",fontFamily:"inherit",cursor:"pointer",display:"flex",gap:4,alignItems:"center",
+          transition:"all .15s"}}
+         onMouseEnter={e=>{e.currentTarget.style.background="#263148";e.currentTarget.style.borderColor="#3b82f660";e.currentTarget.style.color="#e2e8f0";}}
+         onMouseLeave={e=>{e.currentTarget.style.background="#1e293b";e.currentTarget.style.borderColor="#334155";e.currentTarget.style.color="#94a3b8";}}>
+         <span>{t.emoji}</span><span>{t.label}</span>
+        </button>
+       ))}
+      </div>
       <textarea value={input} onChange={e=>setInput(e.target.value)}
        onKeyDown={e=>(e.metaKey||e.ctrlKey)&&e.key==="Enter"&&analyze()}
        placeholder={"계약 관련 상황을 자유롭게 입력하세요.\n\n예) Palantir이 우리 고객에게 직접 접근했다\n 서비스가 갑자기 정지됐다"}
        style={{width:"100%",background:"#1e293b",border:"1px solid #334155",borderRadius:6,padding:"10px 12px",
-        fontSize:12,color:"#e2e8f0",fontFamily:"inherit",resize:"none",height:120,outline:"none",lineHeight:1.7,
+        fontSize:12,color:"#e2e8f0",fontFamily:"inherit",resize:"none",height:200,outline:"none",lineHeight:1.7,
         boxSizing:"border-box"}}/>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
        <span style={{fontSize:10,color:"#334155"}}>⌘+Enter</span>
@@ -531,10 +582,10 @@ export default function IssueAnalyzer() {
     <div style={{overflowY:"auto",padding:24,background:"#020617"}}>
      {loading && (
       <div style={{background:"#0f172a",border:"1px solid #334155",borderRadius:10,padding:40,textAlign:"center"}}>
-       <div style={{fontSize:13,color:loadingMsg==="VERIFYING..."?"#a78bfa":"#64748b",letterSpacing:"0.1em"}}>{loadingMsg}</div>
-       {loadingMsg==="VERIFYING..." && <div style={{fontSize:11,color:"#7c3aed",marginTop:4}}>Devil's Advocate 검증 중...</div>}
+       <div style={{fontSize:13,color:loadingMsg==="DELIBERATING..."?"#a78bfa":"#64748b",letterSpacing:"0.1em"}}>{loadingMsg}</div>
+       {loadingMsg==="DELIBERATING..." && <div style={{fontSize:11,color:"#7c3aed",marginTop:4}}>판사 심의 중...</div>}
        <div style={{display:"flex",justifyContent:"center",gap:6,marginTop:14}}>
-        {[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:loadingMsg==="VERIFYING..."?"#a78bfa":"#3b82f6",animation:"bounce 0.8s ease-in-out infinite",animationDelay:`${i*0.2}s`}}/>)}
+        {[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:loadingMsg==="DELIBERATING..."?"#a78bfa":"#3b82f6",animation:"bounce 0.8s ease-in-out infinite",animationDelay:`${i*0.2}s`}}/>)}
        </div>
       </div>
      )}
@@ -1378,60 +1429,6 @@ function buildSimilarCaseContext(cases) {
 '  }));\n'
 '}\n'
 '\n'
-// --- VERIFICATION PROMPT ------------------------------------------------------
-function buildVerificationPrompt(query, result) {
- const clauseIds = (result.triggered_clauses || []).map(c => c.clause_id || c.id || "").filter(Boolean).join(", ") || "없음";
- const conflictIds = (result.related_conflicts || []).map(c => c.id || "").filter(Boolean).join(", ") || "없음";
- return `당신은 KT 내부 법무팀의 비판적 계약 검토자입니다. 1차 AI 분석을 꼼꼼히 검토하고 오류를 찾아내시오.
-
-【원본 질문】
-${query}
-
-【1차 분석 결과】
-위험도: ${result.risk_level}
-위험 이유: ${result.risk_reason}
-핵심 결론: ${result.bottom_line}
-KT 방어 논거: ${result.kt_defense}
-Palantir 측 논거: ${result.palantir_position}
-인용 조항: ${clauseIds}
-인용 충돌: ${conflictIds}
-
-【검증 체크리스트 — 각 항목 명시적으로 확인】
-① 고객 범위 오류 체크
-- Target Market(금융서비스, Appendix 6 보험사 21개사)에 해당하는 고객인가?
-- Other Market(Appendix 7 13개사 — 포스코 계열, 대한항공, 한화시스템, GS 등)인가?
-- 계약 범위 외 고객에게 SAA-1.3.1/1.3.2 독점권을 잘못 적용했는가?
-
-② EBT 범위 오류 체크
-- EBT(SAA-2.10)가 Target Market 외 고객에게 적용됐는가? → 오류
-
-③ 위험도 기준 적합성 체크
-- HIGH: material breach 가능, 즉각 금전손실, 강행법규 위반, 즉시 정지 트리거
-- MEDIUM: 치유 가능, 협상 여지, 조건 미충족
-- LOW: 직접 위반 아님, 예방적 수준
-- 현재 위험도가 이 기준에 부합하는가? 과잉/과소 판정은 없는가?
-
-④ TOS §8.4 오용 체크
-- Palantir의 즉시 정지권(TOS §8.4)을 KT 방어 수단으로 인용했는가? → 오류
-
-⑤ 충돌 과잉 포함 체크
-- 해지와 무관한 이슈에 XC-005(OF4 잔여 Fee)를 포함했는가? → 오류
-- Target Market 외 이슈에 IC-001(독점 vs EBT)을 포함했는가? → 오류
-
-⑥ 논리적 일관성
-- KT 귀책인데 KT 피해자로 결론지었는가?
-- 적용 조건 미충족 조항을 인용했는가?
-
-【출력 — JSON만, 다른 텍스트 금지】
-{
- "verdict": "CONFIRMED 또는 REVISED",
- "issues_found": ["발견 오류 목록, 없으면 []"],
- "risk_level": "${result.risk_level}",
- "risk_changed": false,
- "bottom_line_revised": null,
- "verification_note": "검증 요약 2-3문장"
-}`;
-}
 
 // --- HURDLE SNAPSHOT (localStorage → 프롬프트 주입용) -------------------------
 function readHurdleSnapshot() {
@@ -1669,6 +1666,8 @@ LOW (저위험): 다음에 해당 시
 
 【related_conflicts 선별 규칙】
 - 기식별 충돌 목록 전체를 검토하여 이 이슈와 실제로 관련 있는 것만 포함. 관련 없으면 [] 출력.
+- ⚠ id 필드에는 반드시 위 목록의 충돌 ID만 사용: XC-001~XC-005, IC-001~IC-002, EC-001~EC-005.
+  SAA-*, TOS-*, OF-* 형식의 조항 ID를 id에 넣으면 데이터 조회 불가. 조항은 triggered_clauses에만 기입.
 - relevance_level: 상(이슈 해결에 직접 영향) / 중(간접적으로 고려 필요) / 하(참고 수준)
 - relevance_reason: 이 충돌이 이 이슈에서 구체적으로 어떤 문제를 일으키는지 한 문장. 일반론 금지.
 - 단순히 "해지 가능성이 있으니 포함" 식의 기계적 포함 금지.
@@ -1683,7 +1682,187 @@ ${similarCases}
 '`;
 }
 
+// --- KT 변호인 프롬프트 -------------------------------------------------------
+function buildKTLawyerPrompt(mode, amendments=[], hasRawDocs=false, issueType=null) {
+ const contractDocs = ["SAA","TOS","OF3","OF4"];
+ const filteredClauses = mode==="extended"
+  ? CONTRACT_KB.clauses
+  : CONTRACT_KB.clauses.filter(c => contractDocs.includes(c.doc));
+ const filteredConflicts = mode==="extended"
+  ? CONTRACT_KB.conflicts
+  : CONTRACT_KB.conflicts.filter(c => !c.id.startsWith('EC-'));
+ const typeInfo = issueType && ISSUE_TYPES[issueType] ? ISSUE_TYPES[issueType] : null;
+ const priorityClauses = typeInfo ? filteredClauses.filter(c => typeInfo.clauses.includes(c.id)) : filteredClauses;
+ const otherClauses = typeInfo ? filteredClauses.filter(c => !typeInfo.clauses.includes(c.id)) : [];
+ const priorityLines = priorityClauses.map(c => {
+  const base = c.id+" / "+c.doc+" / "+c.topic+" / "+c.core;
+  const detail = c.text ? " | "+c.text : "";
+  const risk = c.kt_risk ? " [KT리스크: "+c.kt_risk+"]" : "";
+  return base+detail+risk;
+ }).join("\n");
+ const otherLines = otherClauses.map(c => c.id+" / "+c.doc+" / "+c.topic+" / "+c.core).join("\n");
+ const priorityConflicts = typeInfo ? filteredConflicts.filter(c => typeInfo.conflicts.includes(c.id)) : filteredConflicts;
+ const otherConflicts = typeInfo ? filteredConflicts.filter(c => !typeInfo.conflicts.includes(c.id)) : [];
+ const priorityConflictLines = priorityConflicts.map(c => c.id+" / "+c.risk+" / "+c.topic+" / "+c.summary).join("\n");
+ const otherConflictLines = otherConflicts.map(c => c.id+" / "+c.risk+" / "+c.topic).join(", ");
+ const amendNote = amendments.length > 0
+  ? "\n【Amendment 반영】\n" + amendments.map(a => `${a.amendedBy}: ${(a.patches||[]).map(p=>p.clauseId).join(", ")} 수정`).join("\n")
+  : "";
+ return `당신은 KT 법무팀 전속 변호인입니다. 아래 이슈에서 KT에게 최대한 유리한 법적 전략과 논거를 구성하시오.
+목표: KT의 권리를 최대화하고, 법적 리스크를 최소화하며, 협상에서 유리한 포지션을 확보할 것.
+${hasRawDocs ? "【원문 첨부】계약서 원문이 첨부되어 있습니다. 조항 해석 시 원문을 우선 참조하십시오." : ""}
+문서 우선순위: Order Form > SAA > TOS
+Hurdle: USD 55,000,000 / OF3: USD 9,000,000 / OF4: USD 27,000,000 (편의해지 불가)
+${readHurdleSnapshot()||""}${amendNote}
+
+【계약 구조 파악 (필수 확인)】
+① 고객 범위:
+ - Target Market (Appendix 6 — 보험·금융): 신한라이프, DB손해보험, DB생명, 현대해상화재보험, 서울보증보험, 한화생명, 한화손해보험, ABL생명, 캐롯손해보험, 메리츠화재, KB손해보험, KDB생명, KB생명, 삼성생명, 삼성화재, 하나생명, 하나손해보험, 미래에셋생명, 농협손해보험, 농협생명, 교보생명 → SAA-1.3.1/1.3.2 독점권 유효
+ - Other Market (Appendix 7): 현대자동차, 기아, 포스코, 한화시스템, 현대로템, 현대글로비스, CJ제일제당, KOBC, 서울아산병원, 산업통상자원부 → Co-Sell 조건 준수, Hurdle 미산입
+ - 범위 외: Palantir 자유 영업 가능. SAA 위반 아님.
+② 행위 주체: KT 귀책인지 Palantir 귀책인지 확인
+③ 조건 충족: Hurdle 달성 여부, 20일 치유기간 선행 여부, EBT Target Market 적용 여부
+④ 문서 우선순위: Order Form > SAA > TOS
+
+${typeInfo ? `【${typeInfo.label} 이슈 — 핵심 조항】\n${priorityLines}` : `주요 조항:\n${priorityLines}`}
+${otherLines ? `\n참고 조항:\n${otherLines}` : ""}
+${typeInfo ? `\n【핵심 충돌】\n${priorityConflictLines}` : `\n기식별 충돌:\n${priorityConflictLines}`}
+${otherConflictLines ? `기타 충돌: ${otherConflictLines}` : ""}
+
+【KT 변호인 전략 수립 지침】
+1) 유리한 조항 해석: 동일 조항도 KT에 유리하게 해석할 수 있는 각도를 발굴하라
+2) 절차적 하자 확인: Palantir이 절차(서면통보, 치유기간 등)를 위반했는지 확인
+3) 협상 레버리지: KT가 협상에서 쓸 수 있는 카드(OF4 편의해지 불가, Hurdle 조건, 독점권 등)를 발굴하라
+4) 선제적 행동: 수동적 방어가 아닌 KT가 먼저 취할 수 있는 행동
+5) 법적 근거 강화: 가장 강력한 조항 근거 2-3개 중심으로 논거 구성
+6) Palantir 절차 하자: Palantir이 SAA/TOS 절차를 위반했다면 반격 포인트로 활용
+
+출력 형식 — 아래 JSON만 출력. 다른 텍스트 절대 금지.
+{
+ "defense_summary": "KT 핵심 방어 논거 (2-3문장, 구체적 조항 인용 필수)",
+ "leverage_points": ["협상 레버리지 1 (근거 조항 포함)", "레버리지 2", "레버리지 3"],
+ "favorable_interpretations": ["KT에 유리한 조항 해석 각도 1", "해석 2"],
+ "procedural_defenses": ["Palantir 절차 하자 또는 KT 절차 준수 논거 1", "논거 2"],
+ "preemptive_actions": ["KT가 선제적으로 취할 수 있는 행동 1", "행동 2"],
+ "relevant_clauses": ["SAA-6.2", "SAA-2.11"],
+ "kt_core_argument": "KT 핵심 주장 한 문장 (가장 강력한 논거)"
+}`;
+}
+
+// --- Palantir 변호인 프롬프트 -------------------------------------------------
+function buildPalantirLawyerPrompt(query, issueType=null) {
+ return `당신은 Palantir Korea LLC 법무팀 변호인입니다. 아래 KT-Palantir 계약 이슈에서 Palantir 측에 가장 유리한 법적 논거와 대응 전략을 구성하시오.
+
+【계약 기본 정보】
+- SAA: KT ↔ Palantir Korea LLC. TOS가 SAA에 통합됨.
+- OF3($9M) + OF4($27M): KT 내부 라이선스. OF4는 편의해지 불가.
+- Hurdle $55M: KT가 고객에게 $55M 이상 판매해야 수익배분 조건 발동. 미달 시 Palantir 수익배분 의무 없음.
+- TOS §8.4: Palantir은 미결제 30일 초과·AUP 위반·법령 위반 시 서비스 즉시 정지 가능 (치유기간 불필요).
+- SAA §6.2: Material breach 시 20일 서면통보 후 해지 가능. 단 TOS §8.4는 즉시 발동.
+- SAA §2.11: Hurdle 달성 시 수익배분 — KT 10% / Palantir 90% (고정). 달성 전 배분 의무 없음.
+- SAA §1.3.1/1.3.2: KT 독점권은 Target Market(보험·금융)에만 적용. Other Market 및 범위 외 고객은 Palantir 자유 영업.
+- 문서 우선순위: Order Form > SAA > TOS
+
+【이슈】
+${query}
+
+【Palantir 변호인 전략 지침】
+1) Palantir에 가장 유리한 계약 해석을 찾아라
+2) KT 논거의 가장 취약한 부분을 공략하라 (적용 조건 미충족, 범위 오류, 절차 하자 등)
+3) 실제 법정/협상에서 Palantir이 제기할 수 있는 가장 강력한 주장에만 집중하라
+4) KT의 절차적 위반·의무 불이행도 포함하라
+
+출력 형식 — 아래 JSON만 출력. 다른 텍스트 절대 금지.
+{
+ "strongest_arguments": ["Palantir 가장 강력한 논거 1 (구체적 조항 근거 포함)", "논거 2", "논거 3"],
+ "clause_basis": ["TOS-8.4", "SAA-6.2"],
+ "kt_weaknesses": ["KT 논거의 가장 취약한 부분 1", "약점 2"],
+ "counter_strategy": "Palantir 예상 대응 전략 요약 (2-3문장, 구체적 행동 포함)"
+}`;
+}
+
+// --- 판사 프롬프트 -------------------------------------------------------------
+function buildJudgePrompt(query, ktStrategy, palantirCase, mode, issueType=null, similarCases=[]) {
+ const toA = (arr) => Array.isArray(arr) && arr.length > 0 ? "- " + arr.join("\n- ") : "- (없음)";
+ const conflictList = CONTRACT_KB.conflicts.map(c => c.id+" / "+c.risk+" / "+c.topic+" / "+c.summary).join("\n");
+ const similarCasesText = similarCases && similarCases.length > 0
+  ? `\n【유사 케이스 참고】\n` + similarCases.map((c,i) => `[${i+1}] ${c.ts} | ${c.risk_level} | Q: ${c.query.slice(0,60)} | 결론: ${c.bottom_line?.slice(0,80)}`).join("\n") + `\n위 케이스를 참고하되 이번 이슈를 독립적으로 검토할 것.`
+  : "";
+ return `당신은 KT-Palantir Korea LLC 계약 분쟁 최종 심의 전문가입니다.
+양측 변호인의 논거를 모두 검토하고 최종 확정 분석을 도출하시오.
+
+【이슈】
+${query}
+${readHurdleSnapshot()||""}
+
+【KT 측 논거】
+핵심 방어: ${ktStrategy.defense_summary||"-"}
+협상 레버리지:
+${toA(ktStrategy.leverage_points)}
+유리한 조항 해석:
+${toA(ktStrategy.favorable_interpretations)}
+절차적 방어:
+${toA(ktStrategy.procedural_defenses)}
+선제 행동:
+${toA(ktStrategy.preemptive_actions)}
+핵심 주장: ${ktStrategy.kt_core_argument||"-"}
+
+【Palantir 측 논거】
+가장 강력한 반론:
+${toA(palantirCase.strongest_arguments)}
+KT 논거 약점:
+${toA(palantirCase.kt_weaknesses)}
+Palantir 대응 전략: ${palantirCase.counter_strategy||"-"}
+
+【판단 원칙】
+- 양측 논거를 균형 있게 검토하되 KT 실무팀이 즉시 활용할 수 있는 방향으로 판단할 것
+- KT 변호인의 유리한 해석 중 법적으로 타당한 것은 kt_defense에 충실히 반영할 것
+- Palantir 논거 중 실제 위협이 되는 것은 위험도 판단과 palantir_position에 반영할 것
+- ⚠ 출력 필드에 "변호인", "판사", "1차", "2차", "단계" 등 내부 프로세스 용어 절대 금지
+
+【기식별 충돌 목록 (related_conflicts 선별용)】
+${conflictList}
+⚠ related_conflicts.id는 위 XC-*/IC-*/EC-* ID만 사용. SAA-*, TOS-* 등 조항 ID 사용 금지.
+
+【위험도 분류 기준】
+HIGH: material breach 가능 / 즉각 금전손실 / 강행법규 위반 / 서비스 즉시 정지 트리거
+MEDIUM: 치유 가능 / 협상 여지 / 조건 미충족으로 즉각 피해 없음
+LOW: 직접 위반 아님 / 예방적 수준 / KT에 명백히 유리
+${similarCasesText}
+
+출력 형식 — 아래 JSON만 출력. 다른 텍스트 절대 금지.
+{
+ "situation_summary": "한 문장 상황 요약",
+ "risk_level": "HIGH 또는 MEDIUM 또는 LOW",
+ "risk_reason": "위험도 판단 이유 (위 분류 기준 중 해당 항목 명시)",
+ "legal_analysis": "법적 효과 분석",
+ "kt_defense": "KT 방어 논거 (KT 변호인 논거 기반 정제, 구체적 조항 인용 필수)",
+ "palantir_position": "Palantir 측 주장 (Palantir 변호인 논거 기반)",
+ "bottom_line": "핵심 결론 한 문장",
+ "related_conflicts": [
+  {"id": "XC-001", "relevance_level": "상", "relevance_reason": "이 충돌이 이슈에서 왜 직접 문제인지 한 문장"}
+ ],
+ "triggered_clauses": [
+  {"clause_id": "SAA-6.2", "doc": "SAA", "topic": "조항주제", "relevance": "관련성", "kt_position": "KT입장", "urgency": "즉시"}
+ ],
+ "immediate_actions": [
+  {"step": "STEP 1", "timeframe": "오늘중", "action": "구체적 조치 내용", "clauses": "SAA-6.2"},
+  {"step": "STEP 2", "timeframe": "3일내", "action": "구체적 조치 내용", "clauses": "SAA-6.3"},
+  {"step": "STEP 3", "timeframe": "1주내", "action": "구체적 조치 내용", "clauses": "없음"}
+ ]
+}
+【immediate_actions 규칙】 반드시 3개 이상 출력. "조치 없음" 또는 빈 배열 [] 출력 금지.`;
+}
+
 // --- REPORT -------------------------------------------------------------------
+// 리포트 HTML용 텍스트 포맷터: 1)/2) → 줄바꿈, \n → <br>
+function fmtArgHTML(text) {
+ if (!text) return "";
+ return text
+  .replace(/(^|\n)\s*([0-9]+)\)\s+/g, (_, nl, n) => `${nl ? "<br>" : ""}<b>${n})</b> `)
+  .replace(/\n/g, "<br>");
+}
+
 function buildReportHTML(query, result, mode) {
  const RC = { HIGH:"#C0392B", MEDIUM:"#E67E22", LOW:"#1E7E34", NONE:"#2980B9" };
  const RB = { HIGH:"#FDF2F2", MEDIUM:"#FFFBF0", LOW:"#F0FAF4", NONE:"#EEF4FB" };
@@ -1692,175 +1871,288 @@ function buildReportHTML(query, result, mode) {
  const rc = RC[rl]||RC.NONE;
  const rb = RB[rl]||RB.NONE;
  const ts = new Date().toLocaleString("ko-KR");
-
  const STEP_COLORS = ["#C0392B","#E67E22","#2980B9","#27AE60","#8E44AD"];
+ const kts = result._ktStrategy||{};
+ const pal = result._palantirCase||{};
 
- // -- 즉시 조치사항 HTML -----------------------------------------
- let actionsHTML = "";
+ // ── helpers ──────────────────────────────────────────────────
+ function appHeader(label, desc) {
+  return '<div style="background:#0f172a;color:#fff;padding:18px 40px;margin:0 -40px 24px">'
+   +'<div style="font-size:14px;font-weight:800;letter-spacing:.04em">'+label+'</div>'
+   +(desc?'<div style="font-size:11px;color:#94a3b8;margin-top:4px">'+desc+'</div>':'')
+   +'</div>';
+ }
+ function bulletList(items, color) {
+  if (!items||!items.length) return '<div style="font-size:12px;color:#94a3b8">해당 없음</div>';
+  return items.map(function(p,i){
+   return '<div style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;'+(i>0?'border-top:1px solid #f1f5f9':'')+'">'
+    +'<span style="min-width:20px;height:20px;border-radius:50%;background:'+color+'18;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:'+color+';flex-shrink:0;margin-top:1px">'+(i+1)+'</span>'
+    +'<span style="font-size:12px;color:#334155;line-height:1.7">'+p+'</span>'
+    +'</div>';
+  }).join("");
+ }
+ function pageBreak() { return '<div style="page-break-before:always;padding-top:32px;margin-top:0"></div>'; }
+ function footer(label) {
+  return '<div style="margin-top:40px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;font-family:JetBrains Mono,monospace">'
+   +'<span>'+label+'</span><span>'+ts+'</span></div>';
+ }
+
+ // ── 별첨 A: KT 방어 전략 ──────────────────────────────────────
+ let appA = "";
+ appA += '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #2563eb;border-radius:8px;padding:14px 18px;margin-bottom:18px">'
+  +'<div style="font-size:10px;font-weight:700;color:#1d4ed8;letter-spacing:.08em;margin-bottom:6px">KT 핵심 방어 논거</div>'
+  +'<div style="font-size:13px;color:#1e3a8a;line-height:1.8">'+fmtArgHTML(kts.defense_summary||result.kt_defense||"—")+'</div>'
+  +'</div>';
+ if ((kts.leverage_points||[]).length) {
+  appA += '<div style="margin-bottom:18px"><div style="font-size:10px;font-weight:800;color:#64748b;letter-spacing:.1em;margin-bottom:10px;padding-bottom:5px;border-bottom:1px solid #e2e8f0">협상 레버리지 포인트</div>'
+   +bulletList(kts.leverage_points,"#2563eb")+'</div>';
+ }
+ if ((kts.favorable_interpretations||[]).length) {
+  appA += '<div style="margin-bottom:18px"><div style="font-size:10px;font-weight:800;color:#64748b;letter-spacing:.1em;margin-bottom:10px;padding-bottom:5px;border-bottom:1px solid #e2e8f0">유리한 조항 해석 각도</div>'
+   +bulletList(kts.favorable_interpretations,"#10b981")+'</div>';
+ }
+ if ((kts.procedural_defenses||[]).length) {
+  appA += '<div style="margin-bottom:18px"><div style="font-size:10px;font-weight:800;color:#64748b;letter-spacing:.1em;margin-bottom:10px;padding-bottom:5px;border-bottom:1px solid #e2e8f0">절차적 방어 / Palantir 하자</div>'
+   +bulletList(kts.procedural_defenses,"#f59e0b")+'</div>';
+ }
+ if ((kts.preemptive_actions||[]).length) {
+  appA += '<div style="margin-bottom:18px"><div style="font-size:10px;font-weight:800;color:#64748b;letter-spacing:.1em;margin-bottom:10px;padding-bottom:5px;border-bottom:1px solid #e2e8f0">KT 선제적 행동</div>'
+   +bulletList(kts.preemptive_actions,"#f59e0b")+'</div>';
+ }
+
+ // ── 별첨 B: Palantir 예상 반론 ────────────────────────────────
+ let appB = "";
+ appB += '<div style="background:#fef2f2;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:8px;padding:14px 18px;margin-bottom:18px">'
+  +'<div style="font-size:10px;font-weight:700;color:#991b1b;letter-spacing:.08em;margin-bottom:6px">Palantir 측 논거 (판사 정제)</div>'
+  +'<div style="font-size:13px;color:#7f1d1d;line-height:1.8">'+fmtArgHTML(result.palantir_position||"—")+'</div>'
+  +'</div>';
+ if ((pal.strongest_arguments||[]).length) {
+  appB += '<div style="margin-bottom:18px"><div style="font-size:10px;font-weight:800;color:#64748b;letter-spacing:.1em;margin-bottom:10px;padding-bottom:5px;border-bottom:1px solid #e2e8f0">가장 강력한 반론</div>'
+   +bulletList(pal.strongest_arguments,"#dc2626")+'</div>';
+ }
+ if ((pal.kt_weaknesses||[]).length) {
+  appB += '<div style="margin-bottom:18px"><div style="font-size:10px;font-weight:800;color:#64748b;letter-spacing:.1em;margin-bottom:10px;padding-bottom:5px;border-bottom:1px solid #e2e8f0">KT 논거 취약점</div>'
+   +bulletList(pal.kt_weaknesses,"#f59e0b")+'</div>';
+ }
+ if (pal.counter_strategy) {
+  appB += '<div style="margin-bottom:18px"><div style="font-size:10px;font-weight:800;color:#64748b;letter-spacing:.1em;margin-bottom:10px;padding-bottom:5px;border-bottom:1px solid #e2e8f0">Palantir 예상 대응 전략</div>'
+   +'<div style="font-size:12px;color:#334155;line-height:1.75">'+fmtArgHTML(pal.counter_strategy)+'</div>'
+   +'</div>';
+ }
+
+ // ── 별첨 C: 즉시 조치사항 ─────────────────────────────────────
+ let appC = "";
  (result.immediate_actions||[]).forEach(function(a, i) {
- const col = STEP_COLORS[i % STEP_COLORS.length];
- const clauses = (a.clauses||"").split(",").map(function(s){return s.trim();}).filter(Boolean);
- const clauseTags = clauses.map(function(c){
- return '<span style="font-size:9px;font-weight:700;color:'+col+';background:'+col+'18;border:1px solid '+col+'44;border-radius:3px;padding:1px 7px;margin-right:4px">'+c+'</span>';
- }).join("");
- actionsHTML += '<div style="display:flex;gap:12px;padding:14px 16px;background:#fff;border:1px solid #e9ecef;border-radius:8px;margin-bottom:10px;border-left:4px solid '+col+'">'
- + '<div style="min-width:52px;text-align:center;flex-shrink:0">'
- + '<div style="font-size:9px;font-weight:800;color:'+col+';background:'+col+'18;border-radius:4px;padding:3px 6px;margin-bottom:4px">'+(a.step||("STEP "+(i+1)))+'</div>'
- + '<div style="font-size:9px;color:#64748b;line-height:1.3">'+(a.timeframe||"")+'</div>'
- + '</div>'
- + '<div style="flex:1">'
- + '<div style="font-size:13px;color:#1e293b;line-height:1.75">'+(a.action||"")+'</div>'
- + (clauses.length ? '<div style="margin-top:8px">'+clauseTags+'</div>' : "")
- + '</div></div>';
+  const col = STEP_COLORS[i % STEP_COLORS.length];
+  const clauses = (a.clauses||"").split(",").map(function(s){return s.trim();}).filter(Boolean);
+  const clauseTags = clauses.map(function(c){
+   return '<span style="font-size:9px;font-weight:700;color:'+col+';background:'+col+'18;border:1px solid '+col+'44;border-radius:3px;padding:1px 7px;margin-right:4px">'+c+'</span>';
+  }).join("");
+  appC += '<div style="display:flex;gap:12px;padding:14px 16px;background:#fff;border:1px solid #e9ecef;border-radius:8px;margin-bottom:10px;border-left:4px solid '+col+'">'
+   +'<div style="min-width:52px;text-align:center;flex-shrink:0">'
+   +'<div style="font-size:9px;font-weight:800;color:'+col+';background:'+col+'18;border-radius:4px;padding:3px 6px;margin-bottom:4px">'+(a.step||("STEP "+(i+1)))+'</div>'
+   +'<div style="font-size:9px;color:#64748b;line-height:1.3">'+(a.timeframe||"")+'</div>'
+   +'</div>'
+   +'<div style="flex:1">'
+   +'<div style="font-size:13px;color:#1e293b;line-height:1.75">'+(a.action||"")+'</div>'
+   +(clauses.length?'<div style="margin-top:8px">'+clauseTags+'</div>':"")
+   +'</div></div>';
  });
 
- // -- 관련 조항 요약 HTML ----------------------------------------
- let clauseSummaryHTML = "";
+ // ── 별첨 D: 관련 조항 요약 ───────────────────────────────────
+ let appD = "";
  (result.triggered_clauses||[]).forEach(function(c) {
- const urgColor = c.urgency==="즉시" ? "#C0392B" : c.urgency==="단기" ? "#E67E22" : "#2980B9";
- clauseSummaryHTML += '<div style="border:1px solid #e2e8f0;border-radius:8px;margin-bottom:10px;overflow:hidden">'
- + '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f8fafc;border-bottom:1px solid #e2e8f0">'
- + '<span style="font-size:12px;font-weight:800;color:#1e293b;font-family:monospace">'+(c.clause_id||c.id||"")+'</span>'
- + '<span style="font-size:10px;color:#64748b">'+(c.doc||"")+'</span>'
- + '<span style="margin-left:auto;font-size:9px;font-weight:700;color:'+urgColor+';background:'+urgColor+'18;border-radius:3px;padding:2px 7px;border:1px solid '+urgColor+'44">'+(c.urgency||"")+'</span>'
- + '</div>'
- + '<div style="padding:10px 14px">'
- + '<div style="font-size:12px;font-weight:600;color:#334155;margin-bottom:5px">'+(c.topic||"")+'</div>'
- + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
- + '<div><div style="font-size:9px;font-weight:700;color:#94a3b8;margin-bottom:3px">관련성</div><div style="font-size:12px;color:#475569;line-height:1.6">'+(c.relevance||"")+'</div></div>'
- + '<div><div style="font-size:9px;font-weight:700;color:#94a3b8;margin-bottom:3px">KT 입장</div><div style="font-size:12px;color:#475569;line-height:1.6">'+(c.kt_position||"")+'</div></div>'
- + '</div></div></div>';
+  const urgColor = c.urgency==="즉시"?"#C0392B":c.urgency==="단기"?"#E67E22":"#2980B9";
+  appD += '<div style="border:1px solid #e2e8f0;border-radius:8px;margin-bottom:12px;overflow:hidden">'
+   +'<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f8fafc;border-bottom:1px solid #e2e8f0">'
+   +'<span style="font-size:12px;font-weight:800;color:#1e293b;font-family:monospace">'+(c.clause_id||c.id||"")+'</span>'
+   +'<span style="font-size:10px;color:#64748b">'+(c.doc||"")+'</span>'
+   +'<span style="margin-left:auto;font-size:9px;font-weight:700;color:'+urgColor+';background:'+urgColor+'18;border-radius:3px;padding:2px 7px;border:1px solid '+urgColor+'44">'+(c.urgency||"")+'</span>'
+   +'</div>'
+   +'<div style="padding:10px 14px">'
+   +'<div style="font-size:12px;font-weight:600;color:#334155;margin-bottom:6px">'+(c.topic||"")+'</div>'
+   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+   +'<div><div style="font-size:9px;font-weight:700;color:#94a3b8;margin-bottom:3px">관련성</div><div style="font-size:12px;color:#475569;line-height:1.6">'+(c.relevance||"")+'</div></div>'
+   +'<div><div style="font-size:9px;font-weight:700;color:#94a3b8;margin-bottom:3px">KT 입장</div><div style="font-size:12px;color:#475569;line-height:1.6">'+(c.kt_position||"")+'</div></div>'
+   +'</div></div></div>';
  });
 
- // -- 별첨: 조항 전문 HTML ---------------------------------------
- let appendixHTML = "";
+ // ── 별첨 E: 조항 원문 전문 ───────────────────────────────────
+ let appE = "";
  (result.triggered_clauses||[]).forEach(function(c) {
- const cid = c.clause_id || c.id || "";
- const ft = (typeof CLAUSE_FULLTEXT !== "undefined") ? CLAUSE_FULLTEXT[cid] : null;
- appendixHTML += '<div style="margin-bottom:32px;break-inside:avoid">'
- + '<div style="display:flex;align-items:baseline;gap:10px;border-bottom:2px solid '+rc+';padding-bottom:6px;margin-bottom:12px">'
- + '<span style="font-size:15px;font-weight:800;color:#1e293b;font-family:monospace">'+cid+'</span>'
- + '<span style="font-size:11px;color:#64748b">'+(c.doc||"")+" · "+(c.topic||"")+'</span>'
- + '</div>';
- if (ft) {
- appendixHTML += '<div style="background:#fffdf5;border:1px solid #fde68a;border-radius:6px;padding:14px 16px;margin-bottom:12px">'
- + '<div style="font-size:9px;font-weight:700;color:#92400e;letter-spacing:.08em;margin-bottom:6px">원문 (ORIGINAL)</div>'
- + '<div style="font-size:12px;color:#1e293b;line-height:1.9;white-space:pre-wrap;font-family:monospace">'+(ft.text||"")+'</div>'
- + '</div>';
- if (ft.translation) {
- appendixHTML += '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:14px 16px;margin-bottom:12px">'
- + '<div style="font-size:9px;font-weight:700;color:#075985;letter-spacing:.08em;margin-bottom:6px">한국어 번역</div>'
- + '<div style="font-size:12px;color:#1e293b;line-height:1.9">'+ft.translation+'</div>'
- + '</div>';
- }
- if (ft.context) {
- appendixHTML += '<div style="background:#fafafa;border:1px solid #e5e7eb;border-radius:6px;padding:12px 14px">'
- + '<div style="font-size:9px;font-weight:700;color:#6b7280;letter-spacing:.08em;margin-bottom:4px">실무 해석</div>'
- + '<div style="font-size:12px;color:#374151;line-height:1.7">'+ft.context+'</div>'
- + '</div>';
- }
- } else {
- appendixHTML += '<div style="padding:12px 14px;background:#f8f9fa;border-radius:6px;font-size:12px;color:#64748b">'
- + '<div style="margin-bottom:6px"><strong>관련성:</strong> '+(c.relevance||"")+'</div>'
- + '<div><strong>KT 입장:</strong> '+(c.kt_position||"")+'</div>'
- + '</div>';
- }
- appendixHTML += '</div>';
+  const cid = c.clause_id||c.id||"";
+  const ft = (typeof CLAUSE_FULLTEXT !== "undefined") ? CLAUSE_FULLTEXT[cid] : null;
+  appE += '<div style="margin-bottom:32px;break-inside:avoid">'
+   +'<div style="display:flex;align-items:baseline;gap:10px;border-bottom:2px solid '+rc+';padding-bottom:6px;margin-bottom:12px">'
+   +'<span style="font-size:15px;font-weight:800;color:#1e293b;font-family:monospace">'+cid+'</span>'
+   +'<span style="font-size:11px;color:#64748b">'+(c.doc||"")+" · "+(c.topic||"")+'</span>'
+   +'</div>';
+  if (ft) {
+   appE += '<div style="background:#fffdf5;border:1px solid #fde68a;border-radius:6px;padding:14px 16px;margin-bottom:12px">'
+    +'<div style="font-size:9px;font-weight:700;color:#92400e;letter-spacing:.08em;margin-bottom:6px">원문 (ORIGINAL)</div>'
+    +'<div style="font-size:12px;color:#1e293b;line-height:1.9;white-space:pre-wrap;font-family:monospace">'+(ft.text||"")+'</div>'
+    +'</div>';
+   if (ft.translation) appE += '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:14px 16px;margin-bottom:12px">'
+    +'<div style="font-size:9px;font-weight:700;color:#075985;letter-spacing:.08em;margin-bottom:6px">한국어 번역</div>'
+    +'<div style="font-size:12px;color:#1e293b;line-height:1.9">'+ft.translation+'</div>'
+    +'</div>';
+   if (ft.context) appE += '<div style="background:#fafafa;border:1px solid #e5e7eb;border-radius:6px;padding:12px 14px">'
+    +'<div style="font-size:9px;font-weight:700;color:#6b7280;letter-spacing:.08em;margin-bottom:4px">실무 해석</div>'
+    +'<div style="font-size:12px;color:#374151;line-height:1.7">'+ft.context+'</div>'
+    +'</div>';
+  } else {
+   appE += '<div style="padding:12px 14px;background:#f8f9fa;border-radius:6px;font-size:12px;color:#64748b">'
+    +'<div style="margin-bottom:6px"><strong>관련성:</strong> '+(c.relevance||"")+'</div>'
+    +'<div><strong>KT 입장:</strong> '+(c.kt_position||"")+'</div>'
+    +'</div>';
+  }
+  appE += '</div>';
  });
 
- // -- 충돌 태그 HTML --------------------------------------------
+ // ── 충돌 태그 ────────────────────────────────────────────────
  let conflictsHTML = "";
  (result.related_conflicts||[]).forEach(function(c) {
- const cid2 = c.id||c;
- const lvl2 = c.relevance_level ? ' ('+c.relevance_level+')' : '';
- conflictsHTML += '<span style="font-size:10px;font-weight:700;color:#7c3aed;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:4px;padding:2px 9px;margin-right:5px">'+cid2+lvl2+'</span>';
+  const cid2 = c.id||c;
+  const lvl2 = c.relevance_level?' ('+c.relevance_level+')':'';
+  conflictsHTML += '<span style="font-size:10px;font-weight:700;color:#7c3aed;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:4px;padding:2px 9px;margin-right:5px;margin-bottom:4px;display:inline-block">'+cid2+lvl2+'</span>';
  });
 
- // -- HTML 조립 -------------------------------------------------
- let html = '<!DOCTYPE html><html lang="ko">\n<head>\n<meta charset="UTF-8">\n<title>계약 리스크 분석 리포트</title>\n'
- + '<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">\n'
- + '<style>\n'
- + '*{box-sizing:border-box}\n'
- + 'body{font-family:"Noto Serif KR","Malgun Gothic",serif;margin:0;padding:0;color:#1e293b;background:#fff;font-size:14px}\n'
- + '.cover{background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);color:#fff;padding:48px 40px 36px}\n'
- + '.cover-sub{font-size:11px;font-weight:700;letter-spacing:.15em;color:#94a3b8;margin-bottom:12px;text-transform:uppercase;font-family:"JetBrains Mono",monospace}\n'
- + '.cover-h1{font-size:26px;font-weight:800;line-height:1.3;margin-bottom:20px}\n'
- + '.risk-badge{display:inline-flex;align-items:center;gap:8px;padding:8px 20px;border-radius:30px;font-weight:800;font-size:14px;background:'+rb+';color:'+rc+';border:2px solid '+rc+'}\n'
- + '.cover-meta{margin-top:28px;font-size:11px;color:#94a3b8;display:flex;gap:24px;flex-wrap:wrap;font-family:"JetBrains Mono",monospace}\n'
- + '.main{padding:32px 40px;max-width:900px;margin:0 auto}\n'
- + '.sec-title{font-size:11px;font-weight:800;color:#64748b;letter-spacing:.12em;text-transform:uppercase;padding-bottom:6px;border-bottom:1px solid #e2e8f0;margin-bottom:14px;font-family:"JetBrains Mono",monospace}\n'
- + '.bottom-line{background:'+rb+';border:1px solid '+rc+'44;border-left:4px solid '+rc+';border-radius:8px;padding:14px 18px;font-size:14px;font-weight:600;color:'+rc+';line-height:1.6;margin-bottom:20px}\n'
- + '.card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;border-top:3px solid '+rc+'}\n'
- + '.card-label{font-size:10px;font-weight:700;color:#64748b;letter-spacing:.08em;margin-bottom:6px;text-transform:uppercase;font-family:"JetBrains Mono",monospace}\n'
- + '.page-break{page-break-before:always;border-top:2px dashed #e2e8f0;padding-top:32px;margin-top:32px}\n'
- + '.app-header{background:#0f172a;color:#fff;padding:20px 40px;margin:0 -40px 24px}\n'
- + '.footer{margin-top:48px;padding-top:16px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;font-family:"JetBrains Mono",monospace}\n'
- + '@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.page-break{page-break-before:always}}\n'
- + '</style>\n</head>\n<body>\n'
+ // ── 별첨 목차 ────────────────────────────────────────────────
+ const appendixTOC = [
+  {label:"별첨 A", title:"KT 방어 전략", has:true},
+  {label:"별첨 B", title:"Palantir 예상 반론", has:true},
+  {label:"별첨 C", title:"즉시 조치사항", has:(result.immediate_actions||[]).length>0},
+  {label:"별첨 D", title:"관련 조항 요약", has:(result.triggered_clauses||[]).length>0},
+  {label:"별첨 E", title:"조항 원문 전문", has:appE.length>0},
+ ].filter(function(x){return x.has;});
+ const tocHTML = appendixTOC.map(function(x){
+  return '<div style="display:flex;align-items:center;gap:12px;padding:7px 0;border-bottom:1px dotted #e2e8f0">'
+   +'<span style="font-size:10px;font-weight:800;color:'+rc+';min-width:60px;font-family:JetBrains Mono,monospace">'+x.label+'</span>'
+   +'<span style="font-size:12px;color:#334155">'+x.title+'</span>'
+   +'</div>';
+ }).join("");
 
- + '<div class="cover">\n'
- + '<div class="cover-sub">Contract Intelligence Report</div>\n'
- + '<div class="cover-h1">계약 리스크 분석 리포트</div>\n'
- + '<div class="risk-badge">&#9651; '+rl+' RISK &nbsp;&mdash;&nbsp; '+(RL[rl]||rl)+'</div>\n'
- + '<div class="cover-meta">'
- + '<span>&#128197; '+ts+'</span>'
- + '<span>&#128269; 분석 모드: '+(mode==="extended"?"확장 (계약+내규)":"기본 (계약 문서)")+'</span>'
- + '<span>&#128203; 관련 조항: '+(result.triggered_clauses||[]).length+'건</span>'
- + '<span>&#9889; 조치사항: '+(result.immediate_actions||[]).length+'건</span>'
- + '</div>\n</div>\n'
+ // ── CSS ──────────────────────────────────────────────────────
+ const css = '*{box-sizing:border-box}'
+  +'body{font-family:"Noto Serif KR","Malgun Gothic",serif;margin:0;padding:0;color:#1e293b;background:#fff;font-size:14px}'
+  +'.cover{background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);color:#fff;padding:48px 40px 36px}'
+  +'.cover-sub{font-size:11px;font-weight:700;letter-spacing:.15em;color:#94a3b8;margin-bottom:12px;text-transform:uppercase;font-family:"JetBrains Mono",monospace}'
+  +'.cover-h1{font-size:26px;font-weight:800;line-height:1.3;margin-bottom:20px}'
+  +'.risk-badge{display:inline-flex;align-items:center;gap:8px;padding:8px 20px;border-radius:30px;font-weight:800;font-size:14px;background:'+rb+';color:'+rc+';border:2px solid '+rc+'}'
+  +'.cover-meta{margin-top:28px;font-size:11px;color:#94a3b8;display:flex;gap:24px;flex-wrap:wrap;font-family:"JetBrains Mono",monospace}'
+  +'.main{padding:32px 40px;max-width:900px;margin:0 auto}'
+  +'.sec-title{font-size:10px;font-weight:800;color:#64748b;letter-spacing:.12em;text-transform:uppercase;padding-bottom:5px;border-bottom:1px solid #e2e8f0;margin-bottom:12px;font-family:"JetBrains Mono",monospace}'
+  +'.bottom-line{background:'+rb+';border:1px solid '+rc+'44;border-left:4px solid '+rc+';border-radius:8px;padding:14px 18px;font-size:14px;font-weight:600;color:'+rc+';line-height:1.6;margin-bottom:18px}'
+  +'.card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:13px 15px}'
+  +'.card-label{font-size:9px;font-weight:700;color:#64748b;letter-spacing:.08em;margin-bottom:5px;text-transform:uppercase;font-family:"JetBrains Mono",monospace}'
+  +'@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'
+  +'.app-section{padding:32px 40px;max-width:900px;margin:0 auto}';
 
- + '<div class="main">\n'
+ // ── 본문 조립 (1장 목표) ──────────────────────────────────────
+ let html = '<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>계약 리스크 분석 리포트</title>'
+  +'<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">'
+  +'<style>'+css+'</style></head><body>';
 
- + '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;margin-bottom:20px">'
- + '<div style="font-size:9px;font-weight:700;color:#64748b;letter-spacing:.1em;margin-bottom:6px;font-family:JetBrains Mono,monospace">QUERY</div>'
- + '<div style="font-size:14px;color:#1e293b;line-height:1.7;font-weight:500">'+(query||"")+'</div>'
- + '</div>\n'
+ // 표지
+ html += '<div class="cover">'
+  +'<div class="cover-sub">Contract Intelligence Report</div>'
+  +'<div class="cover-h1">계약 리스크 분석 리포트</div>'
+  +'<div class="risk-badge">&#9651; '+rl+' RISK &nbsp;&mdash;&nbsp; '+(RL[rl]||rl)+'</div>'
+  +'<div class="cover-meta">'
+  +'<span>&#128197; '+ts+'</span>'
+  +'<span>&#128269; '+(mode==="extended"?"확장 (계약+내규)":"기본 (계약 문서)")+'</span>'
+  +'<span>&#128203; 관련 조항 '+(result.triggered_clauses||[]).length+'건</span>'
+  +'<span>&#9889; 조치사항 '+(result.immediate_actions||[]).length+'건</span>'
+  +'</div></div>';
 
- + '<div class="bottom-line">&#128161; '+(result.bottom_line||result.situation_summary||"")+'</div>\n'
+ // 본문
+ html += '<div class="main">';
 
- + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">'
- + '<div class="card"><div class="card-label">상황 요약</div><div style="font-size:13px;color:#1e293b;line-height:1.7">'+(result.situation_summary||"")+'</div></div>'
- + '<div class="card"><div class="card-label">리스크 판단 근거</div><div style="font-size:13px;color:#1e293b;line-height:1.7">'+(result.risk_reason||"")+'</div></div>'
- + '</div>\n'
+ // 이슈
+ html += '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;margin-bottom:16px">'
+  +'<div style="font-size:9px;font-weight:700;color:#64748b;letter-spacing:.1em;margin-bottom:5px;font-family:JetBrains Mono,monospace">ISSUE</div>'
+  +'<div style="font-size:13px;color:#1e293b;line-height:1.65;font-weight:500">'+(query||"")+'</div>'
+  +'</div>';
 
- + '<div style="margin-bottom:20px"><div class="sec-title">&#9878; 법적 분석</div>'
- + '<div style="font-size:13px;color:#334155;line-height:1.85">'+(result.legal_analysis||"")+'</div></div>\n'
+ // 판사 결론
+ html += '<div class="bottom-line">&#9878; '+(result.bottom_line||result.situation_summary||"")+'</div>';
 
- + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">'
- + '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;border-top:3px solid #2980B9"><div class="card-label" style="color:#2980B9">&#128737; KT 방어 논거</div><div style="font-size:13px;color:#1e293b;line-height:1.7">'+(result.kt_defense||"")+'</div></div>'
- + '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;border-top:3px solid #C0392B"><div class="card-label" style="color:#C0392B">&#9876; Palantir 측 주장</div><div style="font-size:13px;color:#1e293b;line-height:1.7">'+(result.palantir_position||"")+'</div></div>'
- + '</div>\n';
+ // 상황 요약 + 법적 분석 (2-col)
+ html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">'
+  +'<div class="card"><div class="card-label">상황 요약</div><div style="font-size:12px;color:#1e293b;line-height:1.7">'+(result.situation_summary||"")+'</div></div>'
+  +'<div class="card"><div class="card-label">법적 분석</div><div style="font-size:12px;color:#334155;line-height:1.7">'+(result.legal_analysis||"")+'</div></div>'
+  +'</div>';
 
+ // 위험도 근거
+ html += '<div style="margin-bottom:16px"><div class="sec-title">위험도 판단 근거</div>'
+  +'<div style="font-size:12px;color:#334155;line-height:1.8">'+(result.risk_reason||"")+'</div></div>';
+
+ // 충돌 조항 태그
  if (conflictsHTML) {
- html += '<div style="margin-bottom:20px"><div class="sec-title">&#8634; 식별된 충돌 조항</div>'
- + '<div style="display:flex;flex-wrap:wrap;gap:5px">'+conflictsHTML+'</div></div>\n';
+  html += '<div style="margin-bottom:14px"><div class="sec-title">식별된 충돌 조항</div>'
+   +'<div style="display:flex;flex-wrap:wrap;gap:4px">'+conflictsHTML+'</div></div>';
  }
 
- if (clauseSummaryHTML) {
- html += '<div style="margin-bottom:20px"><div class="sec-title">&#128204; 관련 조항 요약 ('+(result.triggered_clauses||[]).length+'건)</div>'
- + clauseSummaryHTML + '</div>\n';
+ // 별첨 안내
+ html += '<div style="margin-top:20px;padding:14px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px">'
+  +'<div class="sec-title" style="margin-bottom:8px">별첨 목차</div>'
+  +tocHTML
+  +'</div>';
+
+ html += footer("KT · Palantir Korea LLC 계약 인텔리전스 시스템");
+ html += '</div>'; // .main
+
+ // ── 별첨 A ─────────────────────────────────────────────────
+ html += '<div style="page-break-before:always"></div>'
+  +'<div class="app-section">'
+  +appHeader("별첨 A &mdash; KT 방어 전략","KT 측 방어 논거 · 협상 레버리지 · 유리한 조항 해석 · 절차적 방어 · 선제적 행동")
+  +appA
+  +footer("[별첨 A] KT 방어 전략 · KT × Palantir 계약 인텔리전스")
+  +'</div>';
+
+ // ── 별첨 B ─────────────────────────────────────────────────
+ html += '<div style="page-break-before:always"></div>'
+  +'<div class="app-section">'
+  +appHeader("별첨 B &mdash; Palantir 예상 반론","Palantir 측 논거 · 강력한 반론 · KT 취약점 · 예상 대응 전략")
+  +appB
+  +footer("[별첨 B] Palantir 예상 반론 · KT × Palantir 계약 인텔리전스")
+  +'</div>';
+
+ // ── 별첨 C ─────────────────────────────────────────────────
+ if (appC) {
+  html += '<div style="page-break-before:always"></div>'
+   +'<div class="app-section">'
+   +appHeader("별첨 C &mdash; 즉시 조치사항","우선순위 · 기한 · 담당 조항 기준 조치 목록")
+   +appC
+   +footer("[별첨 C] 즉시 조치사항 · KT × Palantir 계약 인텔리전스")
+   +'</div>';
  }
 
- if (actionsHTML) {
- html += '<div style="margin-bottom:20px"><div class="sec-title">&#9889; 즉시 조치사항 ('+(result.immediate_actions||[]).length+'건)</div>'
- + actionsHTML + '</div>\n';
+ // ── 별첨 D ─────────────────────────────────────────────────
+ if (appD) {
+  html += '<div style="page-break-before:always"></div>'
+   +'<div class="app-section">'
+   +appHeader("별첨 D &mdash; 관련 조항 요약","본 분석에 인용된 계약 조항의 관련성 · KT 입장 요약")
+   +appD
+   +footer("[별첨 D] 관련 조항 요약 · KT × Palantir 계약 인텔리전스")
+   +'</div>';
  }
 
- html += '<div class="footer"><span>KT &middot; Palantir Korea LLC 계약 인텔리전스 시스템</span><span>'+ts+'</span></div>\n';
-
- if (appendixHTML) {
- html += '<div class="page-break">'
- + '<div class="app-header"><h2 style="margin:0;font-size:17px;font-weight:800">&#128206; 별첨 &mdash; 관련 조항 전문</h2>'
- + '<p style="margin:6px 0 0;font-size:12px;color:#94a3b8">본 분석에 인용된 계약 조항의 원문 &middot; 번역 &middot; 실무 해석을 수록합니다.</p></div>'
- + appendixHTML
- + '<div class="footer"><span>[별첨] 관련 조항 전문 &middot; KT &times; Palantir 계약 인텔리전스</span><span>'+ts+'</span></div>'
- + '</div>';
+ // ── 별첨 E ─────────────────────────────────────────────────
+ if (appE) {
+  html += '<div style="page-break-before:always"></div>'
+   +'<div class="app-section">'
+   +appHeader("별첨 E &mdash; 조항 원문 전문","본 분석에 인용된 계약 조항의 원문 · 번역 · 실무 해석")
+   +appE
+   +footer("[별첨 E] 조항 원문 전문 · KT × Palantir 계약 인텔리전스")
+   +'</div>';
  }
 
+ // ── 고정 버튼 ───────────────────────────────────────────────
  html += '<div style="position:fixed;bottom:24px;right:24px;display:flex;gap:8px;z-index:9999">'
- + '<button onclick="window.print()" style="padding:10px 22px;background:#1e3a6e;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.25)">출력</button>'
- + '<button onclick="window.parent.postMessage(\'closeReport\',\'*\')" style="padding:10px 18px;background:#f1f5f9;color:#475569;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">닫기</button>'
- + '</div>\n</div>\n</body></html>';
+  +'<button onclick="window.print()" style="padding:10px 22px;background:#1e3a6e;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.25)">출력</button>'
+  +'<button onclick="window.parent.postMessage(\'closeReport\',\'*\')" style="padding:10px 18px;background:#f1f5f9;color:#475569;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">닫기</button>'
+  +'</div></body></html>';
 
  return html;
 }
@@ -2408,7 +2700,7 @@ function linkifyClauses(text, onOpen) {
  patterns.push({ pat: m[1] + " " + m[2], id });
  patterns.push({ pat: "§" + m[2], id });
  if (/^[0-9]+(\.[0-9]+)+$/.test(m[2])) {
- patterns.push({ pat: m[2], id });
+ patterns.push({ pat: m[2], id, bare: true });
  }
  }
  if (appendixAlias[id]) {
@@ -2429,20 +2721,35 @@ function linkifyClauses(text, onOpen) {
  patterns.push(...titleAliases);
  patterns.sort((a,b) => b.pat.length - a.pat.length);
 
+ // 숫자만으로 된 bare 패턴 뒤에 올 수 없는 문자 (한국어, 알파벳, 숫자, 점)
+ const BARE_AFTER_BLOCK = /[\d.\uAC00-\uD7A3a-zA-Z]/;
+ const BARE_BEFORE_BLOCK = /[\d.]/;
+
  let segs = [{ text, matched: false }];
- for (const { pat, id } of patterns) {
+ for (const { pat, id, bare } of patterns) {
  const next = [];
  for (const seg of segs) {
  if (seg.matched) { next.push(seg); continue; }
  let rest = seg.text;
  let foundAny = false;
+ let searchFrom = 0;
  while (true) {
- const idx = rest.indexOf(pat);
+ const idx = rest.indexOf(pat, searchFrom);
  if (idx === -1) break;
+ // bare 패턴(숫자만): 앞뒤 문자 검사 — 금액/숫자 문맥이면 건너뜀
+ if (bare) {
+  const charBefore = idx > 0 ? rest[idx - 1] : '';
+  const charAfter = rest[idx + pat.length] || '';
+  if (BARE_BEFORE_BLOCK.test(charBefore) || BARE_AFTER_BLOCK.test(charAfter)) {
+   searchFrom = idx + 1;
+   continue;
+  }
+ }
  foundAny = true;
  if (idx > 0) next.push({ text: rest.slice(0, idx), matched: false });
  next.push({ text: pat, matched: true, id });
  rest = rest.slice(idx + pat.length);
+ searchFrom = 0;
  }
  if (rest) next.push({ text: rest, matched: false });
  if (!foundAny && !rest) next.push({ text: seg.text, matched: false });
@@ -2491,6 +2798,8 @@ function linkifyClauses(text, onOpen) {
 function formatArgument(text, onOpen) {
  if (!text) return null;
  if (typeof text !== "string") text = Array.isArray(text) ? text.join("\n") : String(text);
+ // 1) / 2) 형식을 (1) / (2) 로 정규화
+ text = text.replace(/(^|\n)\s*([0-9]+)\)\s+/g, (_, nl, n) => `${nl}(${n}) `);
  const parts = text.split(/(?=\([0-9]+\))/);
  if (parts.length <= 1) {
  return text.split("\n").map((l,i)=>(
@@ -4407,7 +4716,7 @@ function FollowupChat({ result, mode, amendments=[], onOpenClause }) {
 }
 
 function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
- const [activeSection, setActiveSection] = useState("overview");
+ const [activeSection, setActiveSection] = useState("kt_strategy");
  const [localViewingClause, setLocalViewingClause] = useState(null);
  const openClause = onOpenClause || setLocalViewingClause;
 
@@ -4443,10 +4752,10 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
  const R = RISK[rv] || RISK.NONE;
 
  const sections = [
-  {id:"overview", label:"개요"},
-  {id:"clauses",  label:`조항 (${result.triggered_clauses?.length||0})`},
-  {id:"analysis", label:"법적 분석"},
-  {id:"actions",  label:`조치 (${result.immediate_actions?.length||0})`},
+  {id:"kt_strategy",   label:"KT 전략"},
+  {id:"palantir_case", label:"예상 반론"},
+  {id:"clauses",       label:`조항 (${result.triggered_clauses?.length||0})`},
+  {id:"actions",       label:`조치 (${result.immediate_actions?.length||0})`},
  ];
 
  /* 공용 컴포넌트 */
@@ -4459,10 +4768,6 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
   <div style={{background:S.card,border:`1px solid ${S.border}`,
    borderRadius:8,padding:"14px 16px",marginBottom:12,...style}}>{children}</div>
  );
-
- const verif = result._verification;
- const verifOk = verif?.verdict !== "REVISED";
- const verifColor = verifOk ? "#22c55e" : "#a78bfa";  // green-500 / violet-400
 
  return (
  <>
@@ -4492,15 +4797,6 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
       border:`1px solid ${ISSUE_TYPES[result._issueType].color}40`,
       fontSize:11,fontWeight:600,color:ISSUE_TYPES[result._issueType].color,fontFamily:S.font}}>
       {ISSUE_TYPES[result._issueType].label}
-     </span>
-    )}
-
-    {/* 검증 pill */}
-    {verif && (
-     <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:20,
-      background:verifColor+"14",border:`1px solid ${verifColor}40`,
-      fontSize:11,fontWeight:600,color:verifColor,fontFamily:S.font}}>
-      {verifOk ? "✓ 검증 완료" : "⚠ 검증 수정"}
      </span>
     )}
 
@@ -4536,59 +4832,76 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
   {/* ── 탭 콘텐츠 ── */}
   <div style={{padding:"20px"}}>
 
-   {/* ── OVERVIEW ── */}
-   {activeSection==="overview" && (
+   {/* ── KT 전략 ── */}
+   {activeSection==="kt_strategy" && (
     <div>
-
-     {/* Bottom Line — focal point */}
-     <div style={{background:R.bg,border:`1px solid ${R.border}`,borderRadius:8,
-      padding:"18px 20px",marginBottom:16}}>
-      <Label>Bottom Line</Label>
-      <div style={{fontSize:15,fontWeight:500,color:S.t1,lineHeight:1.8,fontFamily:S.font}}>
-       {linkifyClauses(result.bottom_line||"", openClause)}
+     <Card style={{borderLeft:"3px solid #3b82f6",marginBottom:12}}>
+      <Label>KT 핵심 방어 논거</Label>
+      <div style={{fontSize:13,color:S.t1,lineHeight:1.85,fontFamily:S.font,fontWeight:500}}>
+       {formatArgument(result._ktStrategy?.defense_summary||result.kt_defense||"",openClause)}
       </div>
-     </div>
+     </Card>
 
-     {/* 검증 결과 */}
-     {verif && (
-      <Card style={{borderColor:verifColor+"44",background:S.bg,marginBottom:16}}>
-       <Label>{verifOk ? "✓ 검증 — 이상 없음" : "⚠ 검증 — 수정됨"}</Label>
-       {verif.risk_changed && (
-        <div style={{fontSize:11,color:"#a78bfa",marginBottom:8,fontFamily:S.font}}>
-         위험도 수정: {verif.risk_level_original} → {verif.risk_level}
-        </div>
-       )}
-       {verif.issues_found?.length > 0 && (
-        <div style={{marginBottom:10,display:"flex",flexDirection:"column",gap:6}}>
-         {verif.issues_found.map((issue,i)=>(
-          <div key={i} style={{fontSize:12,color:"#fca5a5",lineHeight:1.65,fontFamily:S.font,
-           paddingLeft:10,borderLeft:"2px solid #ef444460"}}>
-           {issue}
-          </div>
-         ))}
-        </div>
-       )}
-       <div style={{fontSize:12,color:verifColor+"cc",lineHeight:1.75,fontFamily:S.font}}>
-        {verif.verification_note}
+     {result._ktStrategy?.leverage_points?.length>0 && (
+      <Card style={{marginBottom:12}}>
+       <Label>협상 레버리지 포인트</Label>
+       <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {result._ktStrategy.leverage_points.map((p,i)=>(
+         <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+          <span style={{minWidth:20,height:20,borderRadius:"50%",background:"rgba(59,130,246,0.15)",
+           display:"inline-flex",alignItems:"center",justifyContent:"center",
+           fontSize:11,fontWeight:700,color:"#60a5fa",flexShrink:0,marginTop:1}}>{i+1}</span>
+          <span style={{fontSize:13,color:S.t2,lineHeight:1.75,fontFamily:S.font}}>{linkifyClauses(p,openClause)}</span>
+         </div>
+        ))}
        </div>
       </Card>
      )}
 
-     {/* KT vs Palantir — 좌측 border로 명확하게 구분 */}
-     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-      <Card style={{margin:0,borderLeft:"3px solid #3b82f6"}}>
-       <Label>KT 방어 논거</Label>
-       <div style={{fontSize:12,color:S.t2,lineHeight:1.8,fontFamily:S.font}}>{formatArgument(result.kt_defense,openClause)}</div>
+     {result._ktStrategy?.favorable_interpretations?.length>0 && (
+      <Card style={{marginBottom:12,borderLeft:"3px solid #10b981"}}>
+       <Label>유리한 조항 해석 각도</Label>
+       <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {result._ktStrategy.favorable_interpretations.map((p,i)=>(
+         <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+          <span style={{fontSize:16,color:"#10b981",flexShrink:0,marginTop:0,lineHeight:1}}>{"\u2713"}</span>
+          <span style={{fontSize:13,color:S.t2,lineHeight:1.75,fontFamily:S.font}}>{linkifyClauses(p,openClause)}</span>
+         </div>
+        ))}
+       </div>
       </Card>
-      <Card style={{margin:0,borderLeft:"3px solid #ef4444"}}>
-       <Label>Palantir 측 논거</Label>
-       <div style={{fontSize:12,color:S.t2,lineHeight:1.8,fontFamily:S.font}}>{formatArgument(result.palantir_position,openClause)}</div>
-      </Card>
-     </div>
+     )}
 
-     {/* 충돌 조항 */}
+     {result._ktStrategy?.procedural_defenses?.length>0 && (
+      <Card style={{marginBottom:12}}>
+       <Label>절차적 방어 / Palantir 하자</Label>
+       <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {result._ktStrategy.procedural_defenses.map((p,i)=>(
+         <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+          <span style={{fontSize:16,color:"#f59e0b",flexShrink:0,marginTop:0,lineHeight:1}}>{"\u2691"}</span>
+          <span style={{fontSize:13,color:S.t2,lineHeight:1.75,fontFamily:S.font}}>{linkifyClauses(p,openClause)}</span>
+         </div>
+        ))}
+       </div>
+      </Card>
+     )}
+
+     {result._ktStrategy?.preemptive_actions?.length>0 && (
+      <Card style={{marginBottom:12,borderLeft:"3px solid #f59e0b"}}>
+       <Label>KT 선제적 행동</Label>
+       <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {result._ktStrategy.preemptive_actions.map((p,i)=>(
+         <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+          <span style={{fontSize:16,color:"#fbbf24",flexShrink:0,marginTop:0,lineHeight:1}}>{"\u2192"}</span>
+          <span style={{fontSize:13,color:S.t2,lineHeight:1.75,fontFamily:S.font}}>{linkifyClauses(p,openClause)}</span>
+         </div>
+        ))}
+       </div>
+      </Card>
+     )}
+
      {result.related_conflicts?.length>0 && (
-      <Card>
+      <Card style={{marginBottom:12}}>
        <Label>이슈 연관 충돌 조항 ({result.related_conflicts.length}건)</Label>
        <div style={{display:"flex",flexDirection:"column",gap:8}}>
         {result.related_conflicts.map(rc=>{
@@ -4614,17 +4927,12 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
          const docB = parts[1]||"-";
          return (
           <div key={cid} style={{background:S.cardIn,borderRadius:7,border:`1px solid ${S.borderSub}`,overflow:"hidden"}}>
-           {/* 헤더 행 */}
-           <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",
-            borderBottom:`1px solid ${S.borderSub}`}}>
+           <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",borderBottom:`1px solid ${S.borderSub}`}}>
             <span style={{fontSize:11,fontWeight:700,color:"#fbbf24",minWidth:62,fontFamily:S.font}}>{cf.id}</span>
             <span style={{fontSize:12,fontWeight:600,color:S.t1,flex:1,fontFamily:S.font}}>{cf.topic}</span>
-            <span style={{fontSize:10,fontWeight:700,color:riskCol,background:riskCol+"18",
-             padding:"2px 8px",borderRadius:4,fontFamily:S.font}}>{cf.risk}</span>
-            <span style={{fontSize:10,fontWeight:600,color:lvlStyle.color,background:lvlStyle.bg,
-             padding:"2px 8px",borderRadius:4,marginLeft:4,fontFamily:S.font}}>{lvlStyle.label}</span>
+            <span style={{fontSize:10,fontWeight:700,color:riskCol,background:riskCol+"18",padding:"2px 8px",borderRadius:4,fontFamily:S.font}}>{cf.risk}</span>
+            <span style={{fontSize:10,fontWeight:600,color:lvlStyle.color,background:lvlStyle.bg,padding:"2px 8px",borderRadius:4,marginLeft:4,fontFamily:S.font}}>{lvlStyle.label}</span>
            </div>
-           {/* A vs B */}
            <div style={{display:"flex",padding:"10px 12px 8px"}}>
             <div style={{flex:1,paddingRight:10,borderRight:`1px solid ${S.border}`}}>
              <div style={{fontSize:10,fontWeight:600,color:"#60a5fa",marginBottom:5,fontFamily:S.font}}>문서 A</div>
@@ -4636,10 +4944,8 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
             </div>
            </div>
            {reason && (
-            <div style={{padding:"8px 12px 10px",borderTop:`1px solid ${S.borderSub}`,
-             display:"flex",alignItems:"flex-start",gap:8}}>
-             <span style={{fontSize:10,fontWeight:600,color:lvlStyle.color,fontFamily:S.font,
-              whiteSpace:"nowrap",marginTop:2,flexShrink:0}}>이슈 연관</span>
+            <div style={{padding:"8px 12px 10px",borderTop:`1px solid ${S.borderSub}`,display:"flex",alignItems:"flex-start",gap:8}}>
+             <span style={{fontSize:10,fontWeight:600,color:lvlStyle.color,fontFamily:S.font,whiteSpace:"nowrap",marginTop:2,flexShrink:0}}>이슈 연관</span>
              <span style={{fontSize:12,color:S.t2,lineHeight:1.65,fontFamily:S.font}}>{reason}</span>
             </div>
            )}
@@ -4650,18 +4956,14 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
       </Card>
      )}
 
-     {/* 조치 미리보기 */}
      {result.immediate_actions?.length>0 && (
       <Card style={{borderLeft:"3px solid #ef4444"}}>
        <Label>즉시 조치사항 ({result.immediate_actions.length}건) — 상세는 [조치] 탭</Label>
        {result.immediate_actions.map((a,i)=>(
         <div key={i} style={{display:"flex",gap:12,padding:"9px 0",
          borderBottom:i<result.immediate_actions.length-1?`1px solid ${S.borderSub}`:"none"}}>
-         <span style={{fontSize:11,fontWeight:700,color:"#f87171",minWidth:60,
-          paddingTop:1,fontFamily:S.font,lineHeight:1.5,flexShrink:0}}>{a.timeframe}</span>
-         <span style={{fontSize:12,color:S.t3,lineHeight:1.7,flex:1,fontFamily:S.font}}>
-          {a.action?.slice(0,130)}{a.action?.length>130?"…":""}
-         </span>
+         <span style={{fontSize:11,fontWeight:700,color:"#f87171",minWidth:60,paddingTop:1,fontFamily:S.font,lineHeight:1.5,flexShrink:0}}>{a.timeframe}</span>
+         <span style={{fontSize:12,color:S.t3,lineHeight:1.7,flex:1,fontFamily:S.font}}>{a.action}</span>
         </div>
        ))}
       </Card>
@@ -4669,20 +4971,57 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
     </div>
    )}
 
-   {/* ── CLAUSES ── */}
-   {activeSection==="clauses" && (
+   {/* ── 예상 반론 ── */}
+   {activeSection==="palantir_case" && (
     <div>
-     {result.triggered_clauses?.length>0
-      ? result.triggered_clauses.map((c,i)=><ClauseCard key={i} clause={c} onViewFull={openClause}/>)
-      : <div style={{fontSize:13,color:S.t4,textAlign:"center",padding:40,fontFamily:S.font}}>관련 조항 없음</div>
-     }
-    </div>
-   )}
+     <Card style={{borderLeft:"3px solid #ef4444",marginBottom:12}}>
+      <Label>Palantir 측 논거 (판사 정제)</Label>
+      <div style={{fontSize:13,color:S.t2,lineHeight:1.85,fontFamily:S.font}}>
+       {formatArgument(result.palantir_position||"",openClause)}
+      </div>
+     </Card>
 
-   {/* ── ANALYSIS ── */}
-   {activeSection==="analysis" && (
-    <div>
-     <Card>
+     {result._palantirCase?.strongest_arguments?.length>0 && (
+      <Card style={{marginBottom:12,borderLeft:"3px solid #ef4444"}}>
+       <Label>Palantir 가장 강력한 반론</Label>
+       <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {result._palantirCase.strongest_arguments.map((p,i)=>(
+         <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start",
+          padding:"10px 12px",background:S.cardIn,borderRadius:6,border:`1px solid ${S.borderSub}`}}>
+          <span style={{minWidth:20,height:20,borderRadius:"50%",background:"rgba(239,68,68,0.15)",
+           display:"inline-flex",alignItems:"center",justifyContent:"center",
+           fontSize:11,fontWeight:700,color:"#f87171",flexShrink:0,marginTop:1}}>{i+1}</span>
+          <span style={{fontSize:13,color:S.t2,lineHeight:1.75,fontFamily:S.font}}>{linkifyClauses(p,openClause)}</span>
+         </div>
+        ))}
+       </div>
+      </Card>
+     )}
+
+     {result._palantirCase?.kt_weaknesses?.length>0 && (
+      <Card style={{marginBottom:12,borderLeft:"3px solid #f59e0b"}}>
+       <Label>KT 논거 취약점 (Palantir 공략 포인트)</Label>
+       <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {result._palantirCase.kt_weaknesses.map((p,i)=>(
+         <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+          <span style={{fontSize:14,color:"#f59e0b",flexShrink:0,marginTop:1}}>{"\u26a0"}</span>
+          <span style={{fontSize:13,color:S.t2,lineHeight:1.75,fontFamily:S.font}}>{linkifyClauses(p,openClause)}</span>
+         </div>
+        ))}
+       </div>
+      </Card>
+     )}
+
+     {result._palantirCase?.counter_strategy && (
+      <Card style={{marginBottom:12}}>
+       <Label>Palantir 예상 대응 전략</Label>
+       <div style={{fontSize:13,color:S.t2,lineHeight:1.85,fontFamily:S.font}}>
+        {formatArgument(result._palantirCase.counter_strategy,openClause)}
+       </div>
+      </Card>
+     )}
+
+     <Card style={{marginBottom:12}}>
       <Label>위험도 판단 근거</Label>
       <div style={{fontSize:13,color:S.t2,lineHeight:1.9,fontFamily:S.font}}>{formatArgument(result.risk_reason,openClause)}</div>
      </Card>
@@ -4693,7 +5032,18 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
     </div>
    )}
 
-   {/* ── ACTIONS ── */}
+      {/* ── CLAUSES ── */}
+   {activeSection==="clauses" && (
+    <div>
+     {result.triggered_clauses?.length>0
+      ? result.triggered_clauses.map((c,i)=><ClauseCard key={i} clause={c} onViewFull={openClause}/>)
+      : <div style={{fontSize:13,color:S.t4,textAlign:"center",padding:40,fontFamily:S.font}}>관련 조항 없음</div>
+     }
+    </div>
+   )}
+
+
+      {/* ── ACTIONS ── */}
    {activeSection==="actions" && (
     <div>
      {result.immediate_actions?.length>0
