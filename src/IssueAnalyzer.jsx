@@ -4359,246 +4359,277 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
  const openClause = onOpenClause || setLocalViewingClause;
 
  const RISK = {
- HIGH: { color:"#ef4444", bg:"#1a0808", border:"#ef444433", label:"고위험", dot:"#ef4444" },
- MEDIUM: { color:"#f59e0b", bg:"#1a1000", border:"#f59e0b33", label:"주의", dot:"#f59e0b" },
- LOW: { color:"#22c55e", bg:"#061a0e", border:"#22c55e33", label:"양호", dot:"#22c55e" },
- NONE: { color:"#60a5fa", bg:"#070f1a", border:"#60a5fa33", label:"검토", dot:"#60a5fa" },
+  HIGH:   { color:"#ef4444", bg:"rgba(239,68,68,0.08)",   border:"rgba(239,68,68,0.25)",   label:"고위험" },
+  MEDIUM: { color:"#f59e0b", bg:"rgba(245,158,11,0.08)",  border:"rgba(245,158,11,0.25)",  label:"주의"   },
+  LOW:    { color:"#22c55e", bg:"rgba(34,197,94,0.08)",   border:"rgba(34,197,94,0.25)",   label:"양호"   },
+  NONE:   { color:"#60a5fa", bg:"rgba(96,165,250,0.08)",  border:"rgba(96,165,250,0.25)",  label:"검토"   },
  };
  const rv = (result.risk_level||"NONE").toUpperCase();
  const R = RISK[rv] || RISK.NONE;
 
  const sections = [
- {id:"overview", label:"개요"},
- {id:"clauses", label:`조항 (${result.triggered_clauses?.length||0})`},
- {id:"analysis", label:"법적 분석"},
- {id:"actions", label:`조치 (${result.immediate_actions?.length||0})`},
+  {id:"overview", label:"개요"},
+  {id:"clauses",  label:`조항 (${result.triggered_clauses?.length||0})`},
+  {id:"analysis", label:"법적 분석"},
+  {id:"actions",  label:`조치 (${result.immediate_actions?.length||0})`},
  ];
 
- const MiniLabel = ({children}) => (
- <div style={{fontSize:9,fontWeight:700,color:"#2d4060",letterSpacing:"0.12em",marginBottom:6,fontFamily:"'JetBrains Mono',monospace",textTransform:"uppercase"}}>{children}</div>
+ /* design tokens */
+ const T = {
+  card:    "#111827",
+  cardAlt: "#0f172a",
+  border:  "#1e2d40",
+  text1:   "#e2e8f0",
+  text2:   "#94a3b8",
+  text3:   "#4b6480",
+  label:   "#64748b",
+  font:    "system-ui, -apple-system, sans-serif",
+ };
+
+ const SectionLabel = ({children}) => (
+  <div style={{fontSize:10,fontWeight:600,color:T.label,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}>{children}</div>
  );
 
- const Block = ({children, style={}}) => (
- <div style={{background:"#0b1120",border:"1px solid #1c2840",borderRadius:7,padding:"12px 14px",marginBottom:10,...style}}>{children}</div>
+ const Card = ({children, style={}}) => (
+  <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:"14px 16px",marginBottom:12,...style}}>{children}</div>
  );
+
+ const verif = result._verification;
+ const verifColor = verif?.verdict==="REVISED" ? "#a78bfa" : "#22c55e";
 
  return (
  <>
- {/* -- 결과 카드 -- */}
- <div style={{background:"#0b1120",border:`1px solid ${R.border}`,borderRadius:10,overflow:"hidden",marginBottom:12,boxShadow:`0 0 24px ${R.color}0d`}}>
+ {/* ── 결과 카드 ── */}
+ <div style={{background:T.cardAlt,border:`1px solid ${R.border}`,borderRadius:10,overflow:"hidden",marginBottom:12}}>
 
- {/* 헤더 */}
- <div style={{background:R.bg,padding:"16px 20px",borderBottom:`1px solid ${R.border}`}}>
- {result._issueType && ISSUE_TYPES[result._issueType] && (
-  <div style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 10px',
-   background:ISSUE_TYPES[result._issueType].color+'18',
-   border:`1px solid ${ISSUE_TYPES[result._issueType].color}44`,
-   borderRadius:4,marginBottom:6}}>
-   <span style={{fontSize:9,fontWeight:700,
-    color:ISSUE_TYPES[result._issueType].color,
-    fontFamily:"'JetBrains Mono',monospace",letterSpacing:'0.1em'}}>
-    {ISSUE_TYPES[result._issueType].label}
-   </span>
-  </div>
- )}
- <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
- <div style={{display:"inline-flex",alignItems:"center",gap:7,padding:"5px 12px",background:R.color+"1a",borderRadius:20,border:`1px solid ${R.color}44`}}>
- <div style={{width:7,height:7,borderRadius:"50%",background:R.color,boxShadow:`0 0 8px ${R.color}`}}/>
- <span style={{fontSize:11,fontWeight:800,color:R.color,letterSpacing:"0.12em",fontFamily:"'JetBrains Mono',monospace"}}>{rv}</span>
- <span style={{fontSize:10,color:R.color+"cc"}}>{R.label}</span>
- </div>
- {result._verification && (
-  <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",
-   background:result._verification.verdict==="REVISED"?"#1a0e2a":"#061a0e",
-   border:`1px solid ${result._verification.verdict==="REVISED"?"#a78bfa44":"#22c55e44"}`,
-   borderRadius:12}}>
-   <span style={{fontSize:9,fontWeight:800,fontFamily:"'JetBrains Mono',monospace",
-    color:result._verification.verdict==="REVISED"?"#a78bfa":"#22c55e",letterSpacing:"0.08em"}}>
-    {result._verification.verdict==="REVISED"?"⚠ 검증 후 수정":"✓ 검증 완료"}
-   </span>
-  </div>
- )}
- <span style={{fontSize:10,color:"#2d4060",marginLeft:"auto",fontFamily:"'JetBrains Mono',monospace"}}>
- {result.triggered_clauses?.length||0}개 조항 · {result.related_conflicts?.length||0}건 충돌
- </span>
- </div>
- <div style={{fontSize:14,color:"#c8d8ec",fontWeight:500,lineHeight:1.65,fontFamily:"'Noto Serif KR',serif"}}>{linkifyClauses(result.situation_summary||"", openClause)}</div>
- </div>
+  {/* 헤더 */}
+  <div style={{padding:"18px 20px 16px",borderBottom:`1px solid ${T.border}`}}>
 
- {/* 탭 바 */}
- <div style={{display:"flex",borderBottom:"1px solid #1c2840",background:"#080c14",padding:"0 4px"}}>
- {sections.map(s=>(
- <button key={s.id} onClick={()=>setActiveSection(s.id)}
- style={{padding:"9px 16px",border:"none",background:"transparent",cursor:"pointer",
- fontSize:11,fontWeight:activeSection===s.id?600:400,fontFamily:"'Noto Serif KR',serif",
- color:activeSection===s.id?"#7db8f7":"#3a5570",
- borderBottom:activeSection===s.id?"2px solid #3b82f6":"2px solid transparent",
- transition:"all 0.15s",marginBottom:-1}}>
- {s.label}
- </button>
- ))}
- </div>
+   {/* 상단 메타 행 */}
+   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+    {/* 위험도 배지 */}
+    <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px",
+     background:R.bg,border:`1px solid ${R.border}`,borderRadius:20,
+     fontSize:12,fontWeight:700,color:R.color,fontFamily:T.font}}>
+     <span style={{width:7,height:7,borderRadius:"50%",background:R.color,display:"inline-block",
+      boxShadow:`0 0 6px ${R.color}`}}/>
+     {R.label}
+    </span>
 
- {/* 탭 내용 */}
- <div style={{padding:"16px 18px"}}>
+    {/* 이슈 타입 */}
+    {result._issueType && ISSUE_TYPES[result._issueType] && (
+     <span style={{display:"inline-flex",alignItems:"center",padding:"4px 10px",
+      background:ISSUE_TYPES[result._issueType].color+"18",
+      border:`1px solid ${ISSUE_TYPES[result._issueType].color}44`,
+      borderRadius:20,fontSize:11,fontWeight:600,
+      color:ISSUE_TYPES[result._issueType].color,fontFamily:T.font}}>
+      {ISSUE_TYPES[result._issueType].label}
+     </span>
+    )}
 
- {/* OVERVIEW */}
- {activeSection==="overview" && (
- <div>
- {/* 핵심 결론 */}
- <Block style={{borderLeft:`3px solid ${R.color}`,background:R.bg}}>
- <MiniLabel>Bottom Line</MiniLabel>
- <div style={{fontSize:14,color:"#dce4f0",fontWeight:500,lineHeight:1.65,fontFamily:"'Noto Serif KR',serif"}}>{linkifyClauses(result.bottom_line||"", openClause)}</div>
- </Block>
+    {/* 검증 뱃지 */}
+    {verif && (
+     <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",
+      background:verifColor+"12",border:`1px solid ${verifColor}33`,
+      borderRadius:20,fontSize:11,fontWeight:600,color:verifColor,fontFamily:T.font}}>
+      {verif.verdict==="REVISED" ? "⚠ 검증 수정" : "✓ 검증 완료"}
+     </span>
+    )}
 
- {/* 검증 결과 블록 */}
- {result._verification && (
- <Block style={{borderColor:result._verification.verdict==="REVISED"?"#a78bfa44":"#22c55e33",background:result._verification.verdict==="REVISED"?"#0e0a1a":"#040e08"}}>
-  <MiniLabel>{result._verification.verdict==="REVISED"?"⚠ 검증 결과 — 수정됨":"✓ 검증 결과 — 이상 없음"}</MiniLabel>
-  {result._verification.risk_changed && (
-   <div style={{fontSize:11,color:"#a78bfa",marginBottom:6,fontFamily:"'JetBrains Mono',monospace"}}>
-    위험도 수정: {result._verification.risk_level_original} → {result._verification.risk_level}
+    {/* 우측 카운터 */}
+    <span style={{marginLeft:"auto",fontSize:11,color:T.text3,fontFamily:T.font}}>
+     조항 {result.triggered_clauses?.length||0} · 충돌 {result.related_conflicts?.length||0}
+    </span>
    </div>
-  )}
-  {result._verification.issues_found?.length > 0 && (
-   <div style={{marginBottom:8}}>
-    {result._verification.issues_found.map((issue,i)=>(
-     <div key={i} style={{fontSize:11,color:"#f87171",lineHeight:1.7,fontFamily:"'Noto Serif KR',serif",paddingLeft:8,borderLeft:"2px solid #ef444444",marginBottom:4}}>
-      {issue}
+
+   {/* 상황 요약 */}
+   <div style={{fontSize:13,color:T.text2,lineHeight:1.7,fontFamily:T.font}}>
+    {linkifyClauses(result.situation_summary||"", openClause)}
+   </div>
+  </div>
+
+  {/* 탭 바 */}
+  <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,background:"#0a0e18",padding:"0 8px"}}>
+   {sections.map(s=>(
+    <button key={s.id} onClick={()=>setActiveSection(s.id)}
+     style={{padding:"10px 16px",border:"none",background:"transparent",cursor:"pointer",
+      fontSize:12,fontWeight:activeSection===s.id?600:400,fontFamily:T.font,
+      color:activeSection===s.id?"#7db8f7":T.text3,
+      borderBottom:activeSection===s.id?`2px solid #3b82f6`:"2px solid transparent",
+      transition:"color 0.15s",marginBottom:-1,whiteSpace:"nowrap"}}>
+     {s.label}
+    </button>
+   ))}
+  </div>
+
+  {/* 탭 내용 */}
+  <div style={{padding:"18px 20px"}}>
+
+   {/* ── OVERVIEW ── */}
+   {activeSection==="overview" && (
+    <div>
+
+     {/* Bottom Line — 핵심 결론 (focal point) */}
+     <div style={{background:R.bg,border:`1px solid ${R.border}`,borderRadius:8,padding:"16px 18px",marginBottom:16}}>
+      <SectionLabel>Bottom Line</SectionLabel>
+      <div style={{fontSize:15,color:T.text1,fontWeight:500,lineHeight:1.75,fontFamily:T.font}}>
+       {linkifyClauses(result.bottom_line||"", openClause)}
+      </div>
      </div>
-    ))}
-   </div>
-  )}
-  <div style={{fontSize:11,color:result._verification.verdict==="REVISED"?"#c4b5fd":"#86efac",lineHeight:1.7,fontFamily:"'Noto Serif KR',serif"}}>
-   {result._verification.verification_note}
-  </div>
- </Block>
- )}
 
- {/* 2단: KT vs Palantir */}
- <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
- <Block>
- <MiniLabel>KT 방어 논거</MiniLabel>
- <div style={{fontSize:12,color:"#7db8f7",lineHeight:1.7,fontFamily:"'Noto Serif KR',serif"}}>{formatArgument(result.kt_defense,openClause)}</div>
- </Block>
- <Block style={{borderColor:"#ef444422"}}>
- <MiniLabel>Palantir 측 논거</MiniLabel>
- <div style={{fontSize:12,color:"#f87171",lineHeight:1.7,fontFamily:"'Noto Serif KR',serif"}}>{formatArgument(result.palantir_position,openClause)}</div>
- </Block>
- </div>
+     {/* 검증 결과 — 서브 블록 */}
+     {verif && (
+      <Card style={{borderColor:verifColor+"33",marginBottom:16}}>
+       <SectionLabel>{verif.verdict==="REVISED" ? "⚠ 검증 결과 — 수정됨" : "✓ 검증 결과 — 이상 없음"}</SectionLabel>
+       {verif.risk_changed && (
+        <div style={{fontSize:11,color:"#a78bfa",marginBottom:8,fontFamily:T.font}}>
+         위험도 수정: {verif.risk_level_original} → {verif.risk_level}
+        </div>
+       )}
+       {verif.issues_found?.length > 0 && (
+        <div style={{marginBottom:8,display:"flex",flexDirection:"column",gap:4}}>
+         {verif.issues_found.map((issue,i)=>(
+          <div key={i} style={{fontSize:12,color:"#fca5a5",lineHeight:1.65,fontFamily:T.font,
+           paddingLeft:10,borderLeft:`2px solid #ef444466`}}>
+           {issue}
+          </div>
+         ))}
+        </div>
+       )}
+       <div style={{fontSize:12,color:verifColor+"cc",lineHeight:1.7,fontFamily:T.font}}>
+        {verif.verification_note}
+       </div>
+      </Card>
+     )}
 
- {/* 충돌 조항 - 이슈 연관 카드 */}
- {result.related_conflicts?.length>0 && (
- <Block style={{borderColor:"#f59e0b33"}}>
- <MiniLabel>이슈 연관 충돌 조항 ({result.related_conflicts.length}건)</MiniLabel>
- <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:4}}>
- {result.related_conflicts.map(rc=>{
-  const cid = rc.id||rc;
-  const cf = CONTRACT_KB.conflicts.find(x=>x.id===cid);
-  const lvl = rc.relevance_level||"중";
-  const reason = rc.relevance_reason||"";
-  const lvlStyle = {
-   "상": {color:"#ef4444", bg:"#ef444420", label:"관련성 상"},
-   "중": {color:"#f59e0b", bg:"#f59e0b20", label:"관련성 중"},
-   "하": {color:"#6b7280", bg:"#6b728020", label:"관련성 하"}
-  }[lvl]||{color:"#f59e0b", bg:"#f59e0b20", label:lvl};
-  if (!cf) return (
-  <div key={cid} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",background:"#1a1408",borderRadius:5,border:"1px solid #f59e0b22"}}>
-  <span style={{fontSize:10,fontWeight:800,color:"#fbbf24",fontFamily:"'JetBrains Mono',monospace",minWidth:58}}>{cid}</span>
-  <span style={{fontSize:11,color:"#a0b8d0"}}>충돌 데이터 없음</span>
-  </div>
-  );
-  const riskCol = ({HIGH:"#ef4444",MEDIUM:"#f59e0b",LOW:"#22c55e"})[cf.risk]||"#fbbf24";
-  const parts = cf.summary.split(" vs ");
-  const docA = parts[0]||cf.summary;
-  const docB = parts[1]||"-";
-  return (
-  <div key={cid} style={{background:"#0e1520",borderRadius:6,border:"1px solid #f59e0b22",overflow:"hidden"}}>
-   <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderBottom:"1px solid #1c2840",background:"#0a0e18"}}>
-    <span style={{fontSize:10,fontWeight:800,color:"#fbbf24",fontFamily:"'JetBrains Mono',monospace",minWidth:58}}>{cf.id}</span>
-    <span style={{fontSize:11,fontWeight:700,color:"#dce4f0",flex:1}}>{cf.topic}</span>
-    <span style={{fontSize:9,fontWeight:700,color:riskCol,background:riskCol+"18",padding:"2px 6px",borderRadius:3,fontFamily:"'JetBrains Mono',monospace"}}>{cf.risk}</span>
-    <span style={{fontSize:9,fontWeight:700,color:lvlStyle.color,background:lvlStyle.bg,padding:"2px 6px",borderRadius:3,marginLeft:2}}>{lvlStyle.label}</span>
-   </div>
-   <div style={{display:"flex",padding:"8px 10px 6px",gap:0}}>
-    <div style={{flex:1,paddingRight:8,borderRight:"1px solid #1c2840"}}>
-     <div style={{fontSize:9,fontWeight:700,color:"#60a5fa",marginBottom:3,fontFamily:"'JetBrains Mono',monospace"}}>A</div>
-     <div style={{fontSize:11,color:"#a0b8d0",lineHeight:1.5}}>{docA}</div>
+     {/* 2단: KT vs Palantir */}
+     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+      <Card style={{margin:0}}>
+       <SectionLabel>KT 방어 논거</SectionLabel>
+       <div style={{fontSize:12,color:"#93c5fd",lineHeight:1.75,fontFamily:T.font}}>{formatArgument(result.kt_defense,openClause)}</div>
+      </Card>
+      <Card style={{margin:0,borderColor:"rgba(239,68,68,0.2)"}}>
+       <SectionLabel>Palantir 측 논거</SectionLabel>
+       <div style={{fontSize:12,color:"#fca5a5",lineHeight:1.75,fontFamily:T.font}}>{formatArgument(result.palantir_position,openClause)}</div>
+      </Card>
+     </div>
+
+     {/* 충돌 조항 */}
+     {result.related_conflicts?.length>0 && (
+      <Card style={{marginTop:4}}>
+       <SectionLabel>이슈 연관 충돌 조항 ({result.related_conflicts.length}건)</SectionLabel>
+       <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {result.related_conflicts.map(rc=>{
+         const cid = rc.id||rc;
+         const cf = CONTRACT_KB.conflicts.find(x=>x.id===cid);
+         const lvl = rc.relevance_level||"중";
+         const reason = rc.relevance_reason||"";
+         const lvlStyle = {
+          "상":{color:"#ef4444",bg:"#ef444418",label:"관련 상"},
+          "중":{color:"#f59e0b",bg:"#f59e0b18",label:"관련 중"},
+          "하":{color:"#6b7280",bg:"#6b728018",label:"관련 하"},
+         }[lvl]||{color:"#f59e0b",bg:"#f59e0b18",label:lvl};
+         if (!cf) return (
+          <div key={cid} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",
+           background:"#0a0d14",borderRadius:6,border:`1px solid ${T.border}`}}>
+           <span style={{fontSize:11,fontWeight:700,color:"#fbbf24",minWidth:60,fontFamily:T.font}}>{cid}</span>
+           <span style={{fontSize:11,color:T.text3,fontFamily:T.font}}>충돌 데이터 없음</span>
+          </div>
+         );
+         const riskCol = ({HIGH:"#ef4444",MEDIUM:"#f59e0b",LOW:"#22c55e"})[cf.risk]||"#fbbf24";
+         const parts = cf.summary.split(" vs ");
+         const docA = parts[0]||cf.summary;
+         const docB = parts[1]||"-";
+         return (
+          <div key={cid} style={{background:"#0a0d14",borderRadius:7,border:`1px solid ${T.border}`,overflow:"hidden"}}>
+           <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderBottom:`1px solid ${T.border}`}}>
+            <span style={{fontSize:11,fontWeight:700,color:"#fbbf24",minWidth:60,fontFamily:T.font}}>{cf.id}</span>
+            <span style={{fontSize:12,fontWeight:600,color:T.text1,flex:1,fontFamily:T.font}}>{cf.topic}</span>
+            <span style={{fontSize:10,fontWeight:700,color:riskCol,background:riskCol+"18",
+             padding:"2px 7px",borderRadius:4,fontFamily:T.font}}>{cf.risk}</span>
+            <span style={{fontSize:10,fontWeight:600,color:lvlStyle.color,background:lvlStyle.bg,
+             padding:"2px 7px",borderRadius:4,marginLeft:4,fontFamily:T.font}}>{lvlStyle.label}</span>
+           </div>
+           <div style={{display:"flex",padding:"10px 12px 8px",gap:0}}>
+            <div style={{flex:1,paddingRight:10,borderRight:`1px solid ${T.border}`}}>
+             <div style={{fontSize:10,fontWeight:600,color:"#60a5fa",marginBottom:4,fontFamily:T.font}}>문서 A</div>
+             <div style={{fontSize:12,color:T.text2,lineHeight:1.6,fontFamily:T.font}}>{docA}</div>
+            </div>
+            <div style={{flex:1,paddingLeft:10}}>
+             <div style={{fontSize:10,fontWeight:600,color:"#fb923c",marginBottom:4,fontFamily:T.font}}>문서 B</div>
+             <div style={{fontSize:12,color:T.text2,lineHeight:1.6,fontFamily:T.font}}>{docB}</div>
+            </div>
+           </div>
+           {reason && (
+            <div style={{padding:"8px 12px 10px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",gap:8}}>
+             <span style={{fontSize:10,fontWeight:600,color:lvlStyle.color,fontFamily:T.font,whiteSpace:"nowrap",marginTop:2}}>이슈 연관</span>
+             <span style={{fontSize:12,color:T.text1,lineHeight:1.65,fontFamily:T.font}}>{reason}</span>
+            </div>
+           )}
+          </div>
+         );
+        })}
+       </div>
+      </Card>
+     )}
+
+     {/* 조치사항 미리보기 */}
+     {result.immediate_actions?.length>0 && (
+      <Card style={{marginTop:12,borderColor:"rgba(239,68,68,0.18)"}}>
+       <SectionLabel>즉시 조치사항 ({result.immediate_actions.length}건) — 상세는 [조치] 탭</SectionLabel>
+       {result.immediate_actions.map((a,i)=>(
+        <div key={i} style={{display:"flex",gap:12,padding:"8px 0",
+         borderBottom:i<result.immediate_actions.length-1?`1px solid ${T.border}`:"none"}}>
+         <span style={{fontSize:11,fontWeight:700,color:"#ef4444",minWidth:60,paddingTop:1,fontFamily:T.font,lineHeight:1.5}}>{a.timeframe}</span>
+         <span style={{fontSize:12,color:T.text2,lineHeight:1.65,flex:1,fontFamily:T.font}}>{a.action?.slice(0,130)}{a.action?.length>130?"…":""}</span>
+        </div>
+       ))}
+      </Card>
+     )}
     </div>
-    <div style={{flex:1,paddingLeft:8}}>
-     <div style={{fontSize:9,fontWeight:700,color:"#fb923c",marginBottom:3,fontFamily:"'JetBrains Mono',monospace"}}>B</div>
-     <div style={{fontSize:11,color:"#a0b8d0",lineHeight:1.5}}>{docB}</div>
-    </div>
-   </div>
-   {reason && (
-   <div style={{padding:"6px 10px 9px",borderTop:"1px solid #1c2840",display:"flex",alignItems:"flex-start",gap:6,background:lvlStyle.bg+"66"}}>
-    <span style={{fontSize:9,fontWeight:700,color:lvlStyle.color,fontFamily:"'JetBrains Mono',monospace",marginTop:2,whiteSpace:"nowrap"}}>이슈 연관</span>
-    <span style={{fontSize:11,color:"#dce4f0",lineHeight:1.6}}>{reason}</span>
-   </div>
    )}
+
+   {/* ── CLAUSES ── */}
+   {activeSection==="clauses" && (
+    <div>
+     {result.triggered_clauses?.length>0
+      ? result.triggered_clauses.map((c,i)=><ClauseCard key={i} clause={c} onViewFull={openClause}/>)
+      : <div style={{fontSize:13,color:T.text3,textAlign:"center",padding:32,fontFamily:T.font}}>관련 조항 없음</div>
+     }
+    </div>
+   )}
+
+   {/* ── ANALYSIS ── */}
+   {activeSection==="analysis" && (
+    <div>
+     <Card>
+      <SectionLabel>위험도 판단 근거</SectionLabel>
+      <div style={{fontSize:13,color:T.text2,lineHeight:1.85,fontFamily:T.font}}>{formatArgument(result.risk_reason,openClause)}</div>
+     </Card>
+     <Card>
+      <SectionLabel>법적 효과 분석</SectionLabel>
+      <div style={{fontSize:13,color:T.text2,lineHeight:1.85,fontFamily:T.font}}>{formatArgument(result.legal_analysis,openClause)}</div>
+     </Card>
+    </div>
+   )}
+
+   {/* ── ACTIONS ── */}
+   {activeSection==="actions" && (
+    <div>
+     {result.immediate_actions?.length>0
+      ? result.immediate_actions.map((a,i)=><ActionCard key={i} action={a} index={i} onOpen={openClause}/>)
+      : <div style={{fontSize:13,color:T.text3,textAlign:"center",padding:32,fontFamily:T.font}}>조치 사항 없음</div>
+     }
+    </div>
+   )}
+
   </div>
-  );
- })}
- </div>
- </Block>
- )}
-
- {/* 조치사항 미리보기 */}
- {result.immediate_actions?.length>0 && (
- <Block style={{borderColor:"#ef444422"}}>
- <MiniLabel>⚡ 즉시 조치사항 ({result.immediate_actions.length}건) — 상세는 [조치] 탭</MiniLabel>
- {result.immediate_actions.map((a,i)=>(
- <div key={i} style={{display:"flex",gap:10,padding:"7px 0",borderBottom:i<result.immediate_actions.length-1?"1px solid #1c2840":"none"}}>
- <span style={{fontSize:9,fontWeight:800,color:"#ef4444",minWidth:58,paddingTop:2,fontFamily:"'JetBrains Mono',monospace",lineHeight:1.4}}>{a.timeframe}</span>
- <span style={{fontSize:12,color:"#a0b8d0",lineHeight:1.6,flex:1,fontFamily:"'Noto Serif KR',serif"}}>{a.action?.slice(0,130)}{a.action?.length>130?"…":""}</span>
- </div>
- ))}
- </Block>
- )}
- </div>
- )}
-
- {/* CLAUSES */}
- {activeSection==="clauses" && (
- <div>
- {result.triggered_clauses?.length>0
- ? result.triggered_clauses.map((c,i)=><ClauseCard key={i} clause={c} onViewFull={openClause}/>)
- : <div style={{fontSize:12,color:"#2d4060",textAlign:"center",padding:24,fontFamily:"'Noto Serif KR',serif"}}>관련 조항 없음</div>
- }
- </div>
- )}
-
- {/* ANALYSIS */}
- {activeSection==="analysis" && (
- <div>
- <Block>
- <MiniLabel>위험도 판단 근거</MiniLabel>
- <div style={{fontSize:13,color:"#a0b8d0",lineHeight:1.8,fontFamily:"'Noto Serif KR',serif"}}>{formatArgument(result.risk_reason,openClause)}</div>
- </Block>
- <Block>
- <MiniLabel>법적 효과 분석</MiniLabel>
- <div style={{fontSize:13,color:"#a0b8d0",lineHeight:1.85,fontFamily:"'Noto Serif KR',serif"}}>{formatArgument(result.legal_analysis,openClause)}</div>
- </Block>
- </div>
- )}
-
- {/* ACTIONS */}
- {activeSection==="actions" && (
- <div>
- {result.immediate_actions?.length>0
- ? result.immediate_actions.map((a,i)=><ActionCard key={i} action={a} index={i} onOpen={openClause}/>)
- : <div style={{fontSize:12,color:"#2d4060",textAlign:"center",padding:24,fontFamily:"'Noto Serif KR',serif"}}>조치 사항 없음</div>
- }
- </div>
- )}
-
- </div>
  </div>
 
  {!onOpenClause && localViewingClause && <ClauseDrawer clauseId={localViewingClause} onClose={()=>setLocalViewingClause(null)}/>}
 
  {result && <div style={{marginTop:10}}>
- <FollowupChat result={result} mode={mode} amendments={amendments} onOpenClause={openClause}/>
+  <FollowupChat result={result} mode={mode} amendments={amendments} onOpenClause={openClause}/>
  </div>}
 
  <ReportButton result={result} query={query} mode={mode}/>
