@@ -4358,11 +4358,33 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
  const [localViewingClause, setLocalViewingClause] = useState(null);
  const openClause = onOpenClause || setLocalViewingClause;
 
+ /*
+  * Design tokens — Tailwind Slate scale (dark mode)
+  * slate-950:#020617  slate-900:#0f172a  slate-800:#1e293b
+  * slate-700:#334155  slate-600:#475569  slate-500:#64748b
+  * slate-400:#94a3b8  slate-300:#cbd5e1  slate-200:#e2e8f0  slate-100:#f1f5f9
+  *
+  * Risk semantic colors (Tailwind standard):
+  * red-500:#ef4444  amber-500:#f59e0b  green-500:#22c55e  blue-400:#60a5fa
+  */
+ const S = {
+  bg:      "#020617",   // slate-950 — 페이지 최하단
+  card:    "#0f172a",   // slate-900 — 카드 배경
+  cardIn:  "#1e293b",   // slate-800 — 중첩 카드 / 내부 행
+  border:  "#334155",   // slate-700 — 테두리
+  borderSub:"#1e293b",  // slate-800 — 서브 구분선
+  t1:      "#f1f5f9",   // slate-100 — 주요 텍스트
+  t2:      "#cbd5e1",   // slate-300 — 본문
+  t3:      "#94a3b8",   // slate-400 — 보조
+  t4:      "#64748b",   // slate-500 — 레이블/힌트
+  font:    "system-ui, -apple-system, 'Segoe UI', sans-serif",
+ };
+
  const RISK = {
-  HIGH:   { color:"#ef4444", bg:"rgba(239,68,68,0.08)",   border:"rgba(239,68,68,0.25)",   label:"고위험" },
-  MEDIUM: { color:"#f59e0b", bg:"rgba(245,158,11,0.08)",  border:"rgba(245,158,11,0.25)",  label:"주의"   },
-  LOW:    { color:"#22c55e", bg:"rgba(34,197,94,0.08)",   border:"rgba(34,197,94,0.25)",   label:"양호"   },
-  NONE:   { color:"#60a5fa", bg:"rgba(96,165,250,0.08)",  border:"rgba(96,165,250,0.25)",  label:"검토"   },
+  HIGH:   { color:"#ef4444", light:"#fca5a5", bg:"rgba(239,68,68,0.1)",  border:"rgba(239,68,68,0.3)",  label:"고위험" },
+  MEDIUM: { color:"#f59e0b", light:"#fcd34d", bg:"rgba(245,158,11,0.1)", border:"rgba(245,158,11,0.3)", label:"주의"   },
+  LOW:    { color:"#22c55e", light:"#86efac", bg:"rgba(34,197,94,0.1)",  border:"rgba(34,197,94,0.3)",  label:"양호"   },
+  NONE:   { color:"#60a5fa", light:"#93c5fd", bg:"rgba(96,165,250,0.1)", border:"rgba(96,165,250,0.3)", label:"검토"   },
  };
  const rv = (result.risk_level||"NONE").toUpperCase();
  const R = RISK[rv] || RISK.NONE;
@@ -4374,150 +4396,147 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
   {id:"actions",  label:`조치 (${result.immediate_actions?.length||0})`},
  ];
 
- /* design tokens */
- const T = {
-  card:    "#111827",
-  cardAlt: "#0f172a",
-  border:  "#1e2d40",
-  text1:   "#e2e8f0",
-  text2:   "#94a3b8",
-  text3:   "#4b6480",
-  label:   "#64748b",
-  font:    "system-ui, -apple-system, sans-serif",
- };
-
- const SectionLabel = ({children}) => (
-  <div style={{fontSize:10,fontWeight:600,color:T.label,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}>{children}</div>
+ /* 공용 컴포넌트 */
+ const Label = ({children}) => (
+  <div style={{fontSize:10,fontWeight:600,color:S.t4,letterSpacing:"0.1em",
+   textTransform:"uppercase",marginBottom:8,fontFamily:S.font}}>{children}</div>
  );
 
- const Card = ({children, style={}}) => (
-  <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:"14px 16px",marginBottom:12,...style}}>{children}</div>
+ const Card = ({children,style={}}) => (
+  <div style={{background:S.card,border:`1px solid ${S.border}`,
+   borderRadius:8,padding:"14px 16px",marginBottom:12,...style}}>{children}</div>
  );
 
  const verif = result._verification;
- const verifColor = verif?.verdict==="REVISED" ? "#a78bfa" : "#22c55e";
+ const verifOk = verif?.verdict !== "REVISED";
+ const verifColor = verifOk ? "#22c55e" : "#a78bfa";  // green-500 / violet-400
 
  return (
  <>
- {/* ── 결과 카드 ── */}
- <div style={{background:T.cardAlt,border:`1px solid ${R.border}`,borderRadius:10,overflow:"hidden",marginBottom:12}}>
+ {/* ── 결과 카드 전체 래퍼 ── */}
+ <div style={{background:S.card,borderRadius:10,overflow:"hidden",marginBottom:12,
+  border:`1px solid ${S.border}`,boxShadow:"0 4px 24px rgba(0,0,0,0.4)"}}>
 
-  {/* 헤더 */}
-  <div style={{padding:"18px 20px 16px",borderBottom:`1px solid ${T.border}`}}>
+  {/* ── 헤더 ── */}
+  <div style={{background:S.bg,padding:"18px 20px 16px",borderBottom:`1px solid ${S.border}`}}>
 
-   {/* 상단 메타 행 */}
-   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-    {/* 위험도 배지 */}
-    <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px",
-     background:R.bg,border:`1px solid ${R.border}`,borderRadius:20,
-     fontSize:12,fontWeight:700,color:R.color,fontFamily:T.font}}>
-     <span style={{width:7,height:7,borderRadius:"50%",background:R.color,display:"inline-block",
-      boxShadow:`0 0 6px ${R.color}`}}/>
+   {/* 배지 행 */}
+   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+
+    {/* 위험도 pill */}
+    <span style={{display:"inline-flex",alignItems:"center",gap:6,
+     padding:"5px 12px",borderRadius:20,
+     background:R.bg,border:`1px solid ${R.border}`,
+     fontSize:12,fontWeight:700,color:R.color,fontFamily:S.font,letterSpacing:"0.02em"}}>
+     <span style={{width:6,height:6,borderRadius:"50%",background:R.color,display:"inline-block",flexShrink:0}}/>
      {R.label}
     </span>
 
     {/* 이슈 타입 */}
     {result._issueType && ISSUE_TYPES[result._issueType] && (
-     <span style={{display:"inline-flex",alignItems:"center",padding:"4px 10px",
+     <span style={{display:"inline-flex",alignItems:"center",padding:"5px 11px",borderRadius:20,
       background:ISSUE_TYPES[result._issueType].color+"18",
-      border:`1px solid ${ISSUE_TYPES[result._issueType].color}44`,
-      borderRadius:20,fontSize:11,fontWeight:600,
-      color:ISSUE_TYPES[result._issueType].color,fontFamily:T.font}}>
+      border:`1px solid ${ISSUE_TYPES[result._issueType].color}40`,
+      fontSize:11,fontWeight:600,color:ISSUE_TYPES[result._issueType].color,fontFamily:S.font}}>
       {ISSUE_TYPES[result._issueType].label}
      </span>
     )}
 
-    {/* 검증 뱃지 */}
+    {/* 검증 pill */}
     {verif && (
-     <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",
-      background:verifColor+"12",border:`1px solid ${verifColor}33`,
-      borderRadius:20,fontSize:11,fontWeight:600,color:verifColor,fontFamily:T.font}}>
-      {verif.verdict==="REVISED" ? "⚠ 검증 수정" : "✓ 검증 완료"}
+     <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:20,
+      background:verifColor+"14",border:`1px solid ${verifColor}40`,
+      fontSize:11,fontWeight:600,color:verifColor,fontFamily:S.font}}>
+      {verifOk ? "✓ 검증 완료" : "⚠ 검증 수정"}
      </span>
     )}
 
-    {/* 우측 카운터 */}
-    <span style={{marginLeft:"auto",fontSize:11,color:T.text3,fontFamily:T.font}}>
+    {/* 카운터 */}
+    <span style={{marginLeft:"auto",fontSize:11,color:S.t4,fontFamily:S.font}}>
      조항 {result.triggered_clauses?.length||0} · 충돌 {result.related_conflicts?.length||0}
     </span>
    </div>
 
    {/* 상황 요약 */}
-   <div style={{fontSize:13,color:T.text2,lineHeight:1.7,fontFamily:T.font}}>
+   <div style={{fontSize:13,color:S.t3,lineHeight:1.75,fontFamily:S.font}}>
     {linkifyClauses(result.situation_summary||"", openClause)}
    </div>
   </div>
 
-  {/* 탭 바 */}
-  <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,background:"#0a0e18",padding:"0 8px"}}>
-   {sections.map(s=>(
-    <button key={s.id} onClick={()=>setActiveSection(s.id)}
-     style={{padding:"10px 16px",border:"none",background:"transparent",cursor:"pointer",
-      fontSize:12,fontWeight:activeSection===s.id?600:400,fontFamily:T.font,
-      color:activeSection===s.id?"#7db8f7":T.text3,
-      borderBottom:activeSection===s.id?`2px solid #3b82f6`:"2px solid transparent",
-      transition:"color 0.15s",marginBottom:-1,whiteSpace:"nowrap"}}>
-     {s.label}
-    </button>
-   ))}
+  {/* ── 탭 바 ── */}
+  <div style={{display:"flex",borderBottom:`1px solid ${S.border}`,background:S.bg,padding:"0 12px"}}>
+   {sections.map(s=>{
+    const active = activeSection === s.id;
+    return (
+     <button key={s.id} onClick={()=>setActiveSection(s.id)}
+      style={{padding:"11px 14px",border:"none",background:"transparent",cursor:"pointer",
+       fontSize:12,fontWeight:active?600:400,fontFamily:S.font,
+       color:active?S.t1:S.t4,
+       borderBottom:active?`2px solid #60a5fa`:"2px solid transparent",
+       transition:"color 0.15s",marginBottom:-1,whiteSpace:"nowrap"}}>
+      {s.label}
+     </button>
+    );
+   })}
   </div>
 
-  {/* 탭 내용 */}
-  <div style={{padding:"18px 20px"}}>
+  {/* ── 탭 콘텐츠 ── */}
+  <div style={{padding:"20px"}}>
 
    {/* ── OVERVIEW ── */}
    {activeSection==="overview" && (
     <div>
 
-     {/* Bottom Line — 핵심 결론 (focal point) */}
-     <div style={{background:R.bg,border:`1px solid ${R.border}`,borderRadius:8,padding:"16px 18px",marginBottom:16}}>
-      <SectionLabel>Bottom Line</SectionLabel>
-      <div style={{fontSize:15,color:T.text1,fontWeight:500,lineHeight:1.75,fontFamily:T.font}}>
+     {/* Bottom Line — focal point */}
+     <div style={{background:R.bg,border:`1px solid ${R.border}`,borderRadius:8,
+      padding:"18px 20px",marginBottom:16}}>
+      <Label>Bottom Line</Label>
+      <div style={{fontSize:15,fontWeight:500,color:S.t1,lineHeight:1.8,fontFamily:S.font}}>
        {linkifyClauses(result.bottom_line||"", openClause)}
       </div>
      </div>
 
-     {/* 검증 결과 — 서브 블록 */}
+     {/* 검증 결과 */}
      {verif && (
-      <Card style={{borderColor:verifColor+"33",marginBottom:16}}>
-       <SectionLabel>{verif.verdict==="REVISED" ? "⚠ 검증 결과 — 수정됨" : "✓ 검증 결과 — 이상 없음"}</SectionLabel>
+      <Card style={{borderColor:verifColor+"44",background:S.bg,marginBottom:16}}>
+       <Label>{verifOk ? "✓ 검증 — 이상 없음" : "⚠ 검증 — 수정됨"}</Label>
        {verif.risk_changed && (
-        <div style={{fontSize:11,color:"#a78bfa",marginBottom:8,fontFamily:T.font}}>
+        <div style={{fontSize:11,color:"#a78bfa",marginBottom:8,fontFamily:S.font}}>
          위험도 수정: {verif.risk_level_original} → {verif.risk_level}
         </div>
        )}
        {verif.issues_found?.length > 0 && (
-        <div style={{marginBottom:8,display:"flex",flexDirection:"column",gap:4}}>
+        <div style={{marginBottom:10,display:"flex",flexDirection:"column",gap:6}}>
          {verif.issues_found.map((issue,i)=>(
-          <div key={i} style={{fontSize:12,color:"#fca5a5",lineHeight:1.65,fontFamily:T.font,
-           paddingLeft:10,borderLeft:`2px solid #ef444466`}}>
+          <div key={i} style={{fontSize:12,color:"#fca5a5",lineHeight:1.65,fontFamily:S.font,
+           paddingLeft:10,borderLeft:"2px solid #ef444460"}}>
            {issue}
           </div>
          ))}
         </div>
        )}
-       <div style={{fontSize:12,color:verifColor+"cc",lineHeight:1.7,fontFamily:T.font}}>
+       <div style={{fontSize:12,color:verifColor+"cc",lineHeight:1.75,fontFamily:S.font}}>
         {verif.verification_note}
        </div>
       </Card>
      )}
 
-     {/* 2단: KT vs Palantir */}
+     {/* KT vs Palantir — 좌측 border로 명확하게 구분 */}
      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-      <Card style={{margin:0}}>
-       <SectionLabel>KT 방어 논거</SectionLabel>
-       <div style={{fontSize:12,color:"#93c5fd",lineHeight:1.75,fontFamily:T.font}}>{formatArgument(result.kt_defense,openClause)}</div>
+      <Card style={{margin:0,borderLeft:"3px solid #3b82f6"}}>
+       <Label>KT 방어 논거</Label>
+       <div style={{fontSize:12,color:S.t2,lineHeight:1.8,fontFamily:S.font}}>{formatArgument(result.kt_defense,openClause)}</div>
       </Card>
-      <Card style={{margin:0,borderColor:"rgba(239,68,68,0.2)"}}>
-       <SectionLabel>Palantir 측 논거</SectionLabel>
-       <div style={{fontSize:12,color:"#fca5a5",lineHeight:1.75,fontFamily:T.font}}>{formatArgument(result.palantir_position,openClause)}</div>
+      <Card style={{margin:0,borderLeft:"3px solid #ef4444"}}>
+       <Label>Palantir 측 논거</Label>
+       <div style={{fontSize:12,color:S.t2,lineHeight:1.8,fontFamily:S.font}}>{formatArgument(result.palantir_position,openClause)}</div>
       </Card>
      </div>
 
      {/* 충돌 조항 */}
      {result.related_conflicts?.length>0 && (
-      <Card style={{marginTop:4}}>
-       <SectionLabel>이슈 연관 충돌 조항 ({result.related_conflicts.length}건)</SectionLabel>
+      <Card>
+       <Label>이슈 연관 충돌 조항 ({result.related_conflicts.length}건)</Label>
        <div style={{display:"flex",flexDirection:"column",gap:8}}>
         {result.related_conflicts.map(rc=>{
          const cid = rc.id||rc;
@@ -4525,15 +4544,15 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
          const lvl = rc.relevance_level||"중";
          const reason = rc.relevance_reason||"";
          const lvlStyle = {
-          "상":{color:"#ef4444",bg:"#ef444418",label:"관련 상"},
-          "중":{color:"#f59e0b",bg:"#f59e0b18",label:"관련 중"},
-          "하":{color:"#6b7280",bg:"#6b728018",label:"관련 하"},
-         }[lvl]||{color:"#f59e0b",bg:"#f59e0b18",label:lvl};
+          "상":{color:"#ef4444",bg:"rgba(239,68,68,0.12)",label:"관련 상"},
+          "중":{color:"#f59e0b",bg:"rgba(245,158,11,0.12)",label:"관련 중"},
+          "하":{color:"#94a3b8",bg:"rgba(148,163,184,0.1)",label:"관련 하"},
+         }[lvl]||{color:"#f59e0b",bg:"rgba(245,158,11,0.12)",label:lvl};
          if (!cf) return (
-          <div key={cid} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",
-           background:"#0a0d14",borderRadius:6,border:`1px solid ${T.border}`}}>
-           <span style={{fontSize:11,fontWeight:700,color:"#fbbf24",minWidth:60,fontFamily:T.font}}>{cid}</span>
-           <span style={{fontSize:11,color:T.text3,fontFamily:T.font}}>충돌 데이터 없음</span>
+          <div key={cid} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",
+           background:S.cardIn,borderRadius:6,border:`1px solid ${S.borderSub}`}}>
+           <span style={{fontSize:11,fontWeight:700,color:"#fbbf24",minWidth:62,fontFamily:S.font}}>{cid}</span>
+           <span style={{fontSize:11,color:S.t4,fontFamily:S.font}}>충돌 데이터 없음</span>
           </div>
          );
          const riskCol = ({HIGH:"#ef4444",MEDIUM:"#f59e0b",LOW:"#22c55e"})[cf.risk]||"#fbbf24";
@@ -4541,29 +4560,34 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
          const docA = parts[0]||cf.summary;
          const docB = parts[1]||"-";
          return (
-          <div key={cid} style={{background:"#0a0d14",borderRadius:7,border:`1px solid ${T.border}`,overflow:"hidden"}}>
-           <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderBottom:`1px solid ${T.border}`}}>
-            <span style={{fontSize:11,fontWeight:700,color:"#fbbf24",minWidth:60,fontFamily:T.font}}>{cf.id}</span>
-            <span style={{fontSize:12,fontWeight:600,color:T.text1,flex:1,fontFamily:T.font}}>{cf.topic}</span>
+          <div key={cid} style={{background:S.cardIn,borderRadius:7,border:`1px solid ${S.borderSub}`,overflow:"hidden"}}>
+           {/* 헤더 행 */}
+           <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",
+            borderBottom:`1px solid ${S.borderSub}`}}>
+            <span style={{fontSize:11,fontWeight:700,color:"#fbbf24",minWidth:62,fontFamily:S.font}}>{cf.id}</span>
+            <span style={{fontSize:12,fontWeight:600,color:S.t1,flex:1,fontFamily:S.font}}>{cf.topic}</span>
             <span style={{fontSize:10,fontWeight:700,color:riskCol,background:riskCol+"18",
-             padding:"2px 7px",borderRadius:4,fontFamily:T.font}}>{cf.risk}</span>
+             padding:"2px 8px",borderRadius:4,fontFamily:S.font}}>{cf.risk}</span>
             <span style={{fontSize:10,fontWeight:600,color:lvlStyle.color,background:lvlStyle.bg,
-             padding:"2px 7px",borderRadius:4,marginLeft:4,fontFamily:T.font}}>{lvlStyle.label}</span>
+             padding:"2px 8px",borderRadius:4,marginLeft:4,fontFamily:S.font}}>{lvlStyle.label}</span>
            </div>
-           <div style={{display:"flex",padding:"10px 12px 8px",gap:0}}>
-            <div style={{flex:1,paddingRight:10,borderRight:`1px solid ${T.border}`}}>
-             <div style={{fontSize:10,fontWeight:600,color:"#60a5fa",marginBottom:4,fontFamily:T.font}}>문서 A</div>
-             <div style={{fontSize:12,color:T.text2,lineHeight:1.6,fontFamily:T.font}}>{docA}</div>
+           {/* A vs B */}
+           <div style={{display:"flex",padding:"10px 12px 8px"}}>
+            <div style={{flex:1,paddingRight:10,borderRight:`1px solid ${S.border}`}}>
+             <div style={{fontSize:10,fontWeight:600,color:"#60a5fa",marginBottom:5,fontFamily:S.font}}>문서 A</div>
+             <div style={{fontSize:12,color:S.t3,lineHeight:1.65,fontFamily:S.font}}>{docA}</div>
             </div>
             <div style={{flex:1,paddingLeft:10}}>
-             <div style={{fontSize:10,fontWeight:600,color:"#fb923c",marginBottom:4,fontFamily:T.font}}>문서 B</div>
-             <div style={{fontSize:12,color:T.text2,lineHeight:1.6,fontFamily:T.font}}>{docB}</div>
+             <div style={{fontSize:10,fontWeight:600,color:"#fb923c",marginBottom:5,fontFamily:S.font}}>문서 B</div>
+             <div style={{fontSize:12,color:S.t3,lineHeight:1.65,fontFamily:S.font}}>{docB}</div>
             </div>
            </div>
            {reason && (
-            <div style={{padding:"8px 12px 10px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",gap:8}}>
-             <span style={{fontSize:10,fontWeight:600,color:lvlStyle.color,fontFamily:T.font,whiteSpace:"nowrap",marginTop:2}}>이슈 연관</span>
-             <span style={{fontSize:12,color:T.text1,lineHeight:1.65,fontFamily:T.font}}>{reason}</span>
+            <div style={{padding:"8px 12px 10px",borderTop:`1px solid ${S.borderSub}`,
+             display:"flex",alignItems:"flex-start",gap:8}}>
+             <span style={{fontSize:10,fontWeight:600,color:lvlStyle.color,fontFamily:S.font,
+              whiteSpace:"nowrap",marginTop:2,flexShrink:0}}>이슈 연관</span>
+             <span style={{fontSize:12,color:S.t2,lineHeight:1.65,fontFamily:S.font}}>{reason}</span>
             </div>
            )}
           </div>
@@ -4573,15 +4597,18 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
       </Card>
      )}
 
-     {/* 조치사항 미리보기 */}
+     {/* 조치 미리보기 */}
      {result.immediate_actions?.length>0 && (
-      <Card style={{marginTop:12,borderColor:"rgba(239,68,68,0.18)"}}>
-       <SectionLabel>즉시 조치사항 ({result.immediate_actions.length}건) — 상세는 [조치] 탭</SectionLabel>
+      <Card style={{borderLeft:"3px solid #ef4444"}}>
+       <Label>즉시 조치사항 ({result.immediate_actions.length}건) — 상세는 [조치] 탭</Label>
        {result.immediate_actions.map((a,i)=>(
-        <div key={i} style={{display:"flex",gap:12,padding:"8px 0",
-         borderBottom:i<result.immediate_actions.length-1?`1px solid ${T.border}`:"none"}}>
-         <span style={{fontSize:11,fontWeight:700,color:"#ef4444",minWidth:60,paddingTop:1,fontFamily:T.font,lineHeight:1.5}}>{a.timeframe}</span>
-         <span style={{fontSize:12,color:T.text2,lineHeight:1.65,flex:1,fontFamily:T.font}}>{a.action?.slice(0,130)}{a.action?.length>130?"…":""}</span>
+        <div key={i} style={{display:"flex",gap:12,padding:"9px 0",
+         borderBottom:i<result.immediate_actions.length-1?`1px solid ${S.borderSub}`:"none"}}>
+         <span style={{fontSize:11,fontWeight:700,color:"#f87171",minWidth:60,
+          paddingTop:1,fontFamily:S.font,lineHeight:1.5,flexShrink:0}}>{a.timeframe}</span>
+         <span style={{fontSize:12,color:S.t3,lineHeight:1.7,flex:1,fontFamily:S.font}}>
+          {a.action?.slice(0,130)}{a.action?.length>130?"…":""}
+         </span>
         </div>
        ))}
       </Card>
@@ -4594,7 +4621,7 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
     <div>
      {result.triggered_clauses?.length>0
       ? result.triggered_clauses.map((c,i)=><ClauseCard key={i} clause={c} onViewFull={openClause}/>)
-      : <div style={{fontSize:13,color:T.text3,textAlign:"center",padding:32,fontFamily:T.font}}>관련 조항 없음</div>
+      : <div style={{fontSize:13,color:S.t4,textAlign:"center",padding:40,fontFamily:S.font}}>관련 조항 없음</div>
      }
     </div>
    )}
@@ -4603,12 +4630,12 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
    {activeSection==="analysis" && (
     <div>
      <Card>
-      <SectionLabel>위험도 판단 근거</SectionLabel>
-      <div style={{fontSize:13,color:T.text2,lineHeight:1.85,fontFamily:T.font}}>{formatArgument(result.risk_reason,openClause)}</div>
+      <Label>위험도 판단 근거</Label>
+      <div style={{fontSize:13,color:S.t2,lineHeight:1.9,fontFamily:S.font}}>{formatArgument(result.risk_reason,openClause)}</div>
      </Card>
      <Card>
-      <SectionLabel>법적 효과 분석</SectionLabel>
-      <div style={{fontSize:13,color:T.text2,lineHeight:1.85,fontFamily:T.font}}>{formatArgument(result.legal_analysis,openClause)}</div>
+      <Label>법적 효과 분석</Label>
+      <div style={{fontSize:13,color:S.t2,lineHeight:1.9,fontFamily:S.font}}>{formatArgument(result.legal_analysis,openClause)}</div>
      </Card>
     </div>
    )}
@@ -4618,7 +4645,7 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
     <div>
      {result.immediate_actions?.length>0
       ? result.immediate_actions.map((a,i)=><ActionCard key={i} action={a} index={i} onOpen={openClause}/>)
-      : <div style={{fontSize:13,color:T.text3,textAlign:"center",padding:32,fontFamily:T.font}}>조치 사항 없음</div>
+      : <div style={{fontSize:13,color:S.t4,textAlign:"center",padding:40,fontFamily:S.font}}>조치 사항 없음</div>
      }
     </div>
    )}
