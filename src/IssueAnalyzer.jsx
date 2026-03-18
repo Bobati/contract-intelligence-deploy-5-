@@ -327,260 +327,252 @@ export default function IssueAnalyzer() {
 
  if (!sessionReady) {
  return (
- <div style={{fontFamily:"'Inter','Noto Serif KR',sans-serif",background:"#080c14",height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",color:"#e2e8f0",overflow:"hidden"}}>
- <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
- <div style={{width:"min(520px, 92vw)",background:"#0b1120",border:"1px solid #1c2840",borderRadius:10,padding:"24px 22px",boxShadow:"0 10px 30px rgba(0,0,0,0.35)"}}>
- <div style={{fontSize:18,fontWeight:700,color:"#dbeafe",fontFamily:"'JetBrains Mono',monospace",letterSpacing:"0.06em"}}>Contract Intelligence</div>
- <div style={{fontSize:11,color:"#4a6080",marginTop:4,marginBottom:20,letterSpacing:"0.05em"}}>KT × Palantir Korea</div>
- <div style={{fontSize:12,color:"#9fb2c8",marginBottom:8}}>팀 코드를 입력하세요</div>
- <div style={{display:"flex",gap:8}}>
- <input
- value={sessionCode}
- onChange={e=>setSessionCode(e.target.value)}
- onKeyDown={e=>e.key==="Enter" && (sessionCode || "").trim() && handleSessionStart()}
- placeholder="예: KT-SPA팀"
- style={{flex:1,background:"#080e1c",border:"1px solid #1c2840",borderRadius:6,padding:"9px 11px",fontSize:12,color:"#c8d8ec",fontFamily:"'JetBrains Mono',monospace",outline:"none"}}
- />
- <button
- onClick={handleSessionStart}
- disabled={!(sessionCode || "").trim()}
- style={{padding:"9px 14px",background:(sessionCode || "").trim()?"#1d4ed8":"#0d1825",border:`1px solid ${(sessionCode || "").trim()?"#3b82f644":"#1c2840"}`,borderRadius:6,fontSize:11,fontWeight:700,fontFamily:"'Noto Serif KR',serif",color:(sessionCode || "").trim()?"#93c5fd":"#2d4060",cursor:(sessionCode || "").trim()?"pointer":"not-allowed"}}
- >
- 시작
- </button>
- </div>
- <div style={{fontSize:10,color:"#6677aa",marginTop:12,lineHeight:1.7}}>
- 같은 코드를 입력하면 어느 PC에서도 동일한 데이터를 불러옵니다
- </div>
- </div>
+ <div style={{fontFamily:"system-ui,-apple-system,'Segoe UI',sans-serif",background:"#020617",height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",color:"#f1f5f9",overflow:"hidden"}}>
+  <div style={{width:"min(460px,92vw)",background:"#0f172a",border:"1px solid #334155",borderRadius:10,padding:"28px 24px",boxShadow:"0 16px 48px rgba(0,0,0,0.5)"}}>
+   <div style={{fontSize:16,fontWeight:700,color:"#f1f5f9",letterSpacing:"0.03em",marginBottom:4}}>Contract Intelligence</div>
+   <div style={{fontSize:11,color:"#64748b",marginBottom:24,letterSpacing:"0.04em"}}>KT × Palantir Korea</div>
+   <div style={{fontSize:12,color:"#94a3b8",marginBottom:8}}>팀 코드를 입력하세요</div>
+   <div style={{display:"flex",gap:8}}>
+    <input
+     value={sessionCode}
+     onChange={e=>setSessionCode(e.target.value)}
+     onKeyDown={e=>e.key==="Enter" && (sessionCode || "").trim() && handleSessionStart()}
+     placeholder="예: KT-SPA팀"
+     style={{flex:1,background:"#1e293b",border:"1px solid #334155",borderRadius:6,padding:"9px 12px",fontSize:12,color:"#f1f5f9",fontFamily:"inherit",outline:"none"}}
+    />
+    <button
+     onClick={handleSessionStart}
+     disabled={!(sessionCode || "").trim()}
+     style={{padding:"9px 18px",background:(sessionCode || "").trim()?"#1d4ed8":"#1e293b",border:`1px solid ${(sessionCode || "").trim()?"#3b82f660":"#334155"}`,borderRadius:6,fontSize:12,fontWeight:600,fontFamily:"inherit",color:(sessionCode || "").trim()?"#93c5fd":"#64748b",cursor:(sessionCode || "").trim()?"pointer":"not-allowed",transition:"all 0.15s"}}
+    >
+     시작
+    </button>
+   </div>
+   <div style={{fontSize:11,color:"#475569",marginTop:12,lineHeight:1.7}}>
+    같은 코드를 입력하면 어느 PC에서도 동일한 데이터를 불러옵니다
+   </div>
+  </div>
  </div>
  );
  }
 
  return (
- <div style={{fontFamily:"'Inter','Noto Serif KR',sans-serif",background:"#080c14",height:"100vh",display:"flex",flexDirection:"column",color:"#e2e8f0",overflow:"hidden"}}>
- <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+ <div style={{fontFamily:"system-ui,-apple-system,'Segoe UI',sans-serif",background:"#020617",height:"100vh",display:"flex",flexDirection:"column",color:"#f1f5f9",overflow:"hidden"}}>
 
- {/* -- 헤더 -- */}
- <div style={{background:"#0b1120",borderBottom:"1px solid #1c2840",padding:"0 24px",display:"flex",alignItems:"center",gap:20,height:52,flexShrink:0,boxShadow:"0 1px 12px rgba(0,0,0,0.4)"}}>
- {/* 로고 */}
- <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
- <div style={{width:28,height:28,borderRadius:6,background:"linear-gradient(135deg,#1d4ed8,#0ea5e9)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:"#fff",letterSpacing:"-0.05em",boxShadow:"0 0 14px #1d4ed844"}}>CI</div>
- <div>
- <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.12em",color:"#e2eaf8",fontFamily:"'JetBrains Mono',monospace"}}>CONTRACT INTELLIGENCE</div>
- <div style={{fontSize:9,color:"#4a6080",letterSpacing:"0.06em",marginTop:1}}>KT × Palantir Korea LLC</div>
- </div>
- </div>
- <div style={{width:1,height:28,background:"#1c2840",flexShrink:0}}/>
- {/* 탭 */}
- <div style={{display:"flex",gap:2}}>
- {[["docs","문서 관리"],["analyze","이슈 분석"],["hurdle","Hurdle"],["timeline","변경 이력"],["history","히스토리"]].map(([tab,label])=>(
- <button key={tab} onClick={()=>setAppTab(tab)}
- style={{padding:"5px 14px",borderRadius:4,border:"none",cursor:"pointer",
- fontSize:11,fontWeight:appTab===tab?600:400,fontFamily:"'Noto Serif KR',serif",
- transition:"all 0.15s",position:"relative",
- background:appTab===tab?"#162236":"transparent",
- color:appTab===tab?"#7db8f7":"#4a6080",
- borderBottom:appTab===tab?"2px solid #3b82f6":"2px solid transparent"}}>
- {label}
- {tab==="history" && history.length>0 && (
- <span style={{position:"absolute",top:3,right:3,fontSize:7,background:"#3b82f6",
- color:"#fff",borderRadius:"50%",width:12,height:12,
- display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>
- {history.length > 9 ? "9+" : history.length}
- </span>
- )}
- </button>
- ))}
- </div>
- {/* 우측 배지 */}
- <div style={{display:"flex",gap:8,marginLeft:"auto",alignItems:"center"}}>
- <div style={{display:"flex",alignItems:"center",gap:6,marginRight:6}}>
- <span style={{fontSize:10,color:"#9fb2c8",background:"#121d30",padding:"2px 8px",borderRadius:3,border:"1px solid #1c2840",fontFamily:"'JetBrains Mono',monospace"}}>
- 세션: {SESSION_ID || "-"}
- </span>
- <button onClick={handleSessionChange}
- style={{padding:"2px 8px",borderRadius:3,border:"1px solid #334155",background:"#0f172a",color:"#cbd5e1",fontSize:10,cursor:"pointer",fontFamily:"'JetBrains Mono',monospace"}}>
- 변경
- </button>
- </div>
- <span style={{fontSize:9,color:"#2d4060",fontFamily:"'JetBrains Mono',monospace",letterSpacing:"0.08em"}}>KB</span>
- <span style={{fontSize:10,color:"#7db8f7",background:"#1a2e4a",padding:"2px 8px",borderRadius:3,border:"1px solid #1d4ed833",fontFamily:"'JetBrains Mono',monospace"}}>
- {kbSummary.clauses} 조항
- </span>
- <span style={{fontSize:10,color:kbSummary.conflicts>0?"#f87171":"#34d399",
- background:kbSummary.conflicts>0?"#2d101099":"#0d2a1a",
- padding:"2px 8px",borderRadius:3,border:`1px solid ${kbSummary.conflicts>0?"#ef444422":"#10b98122"}`,fontFamily:"'JetBrains Mono',monospace"}}>
- {kbSummary.conflicts} 충돌
- </span>
- {appTab==="analyze" && <>
- <div style={{width:1,height:20,background:"#1c2840",margin:"0 2px"}}/>
- {translationSync.running && (
- <span style={{fontSize:10,color:"#22c55e",background:"#052010",padding:"2px 8px",borderRadius:3,border:"1px solid #22c55e33",fontFamily:"'JetBrains Mono',monospace"}}>
- 번역 동기화 {translationSync.done}/{translationSync.total}
- </span>
- )}
- <div style={{display:"flex",background:"#0d1825",borderRadius:4,padding:2,border:"1px solid #1c2840"}}>
- {[["basic","기본"],["extended","확장"]].map(([m,label])=>(
- <button key={m} onClick={()=>setMode(m)} style={{padding:"3px 11px",borderRadius:3,border:"none",cursor:"pointer",fontSize:10,fontWeight:600,fontFamily:"'Noto Serif KR',serif",transition:"all 0.15s",
- background:mode===m?(m==="extended"?"#1e1050":"#102040"):"transparent",
- color:mode===m?(m==="extended"?"#c084fc":"#7db8f7"):"#4a6080"}}>{label}</button>
- ))}
- </div>
- </>}
- </div>
+ {/* ── 헤더 ── */}
+ <div style={{background:"#0f172a",borderBottom:"1px solid #334155",padding:"0 20px",display:"flex",alignItems:"center",gap:16,height:50,flexShrink:0,boxShadow:"0 1px 8px rgba(0,0,0,0.4)"}}>
+  {/* 로고 */}
+  <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+   <div style={{width:26,height:26,borderRadius:6,background:"linear-gradient(135deg,#1d4ed8,#0ea5e9)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:"#fff",letterSpacing:"-0.04em"}}>CI</div>
+   <div>
+    <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.1em",color:"#cbd5e1"}}>CONTRACT INTELLIGENCE</div>
+    <div style={{fontSize:9,color:"#475569",letterSpacing:"0.04em",marginTop:1}}>KT × Palantir Korea LLC</div>
+   </div>
+  </div>
+  <div style={{width:1,height:24,background:"#334155",flexShrink:0}}/>
+  {/* 탭 */}
+  <div style={{display:"flex",gap:1}}>
+   {[["docs","문서 관리"],["analyze","이슈 분석"],["hurdle","Hurdle"],["timeline","변경 이력"],["history","히스토리"]].map(([tab,label])=>(
+    <button key={tab} onClick={()=>setAppTab(tab)}
+     style={{padding:"6px 14px",borderRadius:4,border:"none",cursor:"pointer",
+      fontSize:12,fontWeight:appTab===tab?600:400,fontFamily:"inherit",
+      transition:"all 0.15s",position:"relative",
+      background:appTab===tab?"#1e293b":"transparent",
+      color:appTab===tab?"#e2e8f0":"#64748b",
+      borderBottom:appTab===tab?"2px solid #60a5fa":"2px solid transparent"}}>
+     {label}
+     {tab==="history" && history.length>0 && (
+      <span style={{position:"absolute",top:4,right:4,fontSize:7,background:"#3b82f6",
+       color:"#fff",borderRadius:"50%",width:11,height:11,
+       display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>
+       {history.length > 9 ? "9+" : history.length}
+      </span>
+     )}
+    </button>
+   ))}
+  </div>
+  {/* 우측 배지 */}
+  <div style={{display:"flex",gap:6,marginLeft:"auto",alignItems:"center"}}>
+   <div style={{display:"flex",alignItems:"center",gap:6}}>
+    <span style={{fontSize:10,color:"#94a3b8",background:"#1e293b",padding:"2px 8px",borderRadius:4,border:"1px solid #334155"}}>
+     세션: {SESSION_ID || "-"}
+    </span>
+    <button onClick={handleSessionChange}
+     style={{padding:"2px 8px",borderRadius:4,border:"1px solid #334155",background:"#1e293b",color:"#94a3b8",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>
+     변경
+    </button>
+   </div>
+   <div style={{width:1,height:18,background:"#334155"}}/>
+   <span style={{fontSize:10,color:"#64748b"}}>KB</span>
+   <span style={{fontSize:10,color:"#93c5fd",background:"#1e293b",padding:"2px 8px",borderRadius:4,border:"1px solid #3b82f630"}}>
+    {kbSummary.clauses} 조항
+   </span>
+   <span style={{fontSize:10,color:kbSummary.conflicts>0?"#f87171":"#4ade80",
+    background:kbSummary.conflicts>0?"#1c0808":"#081c0e",
+    padding:"2px 8px",borderRadius:4,border:`1px solid ${kbSummary.conflicts>0?"#ef444430":"#22c55e30"}`}}>
+    {kbSummary.conflicts} 충돌
+   </span>
+   {appTab==="analyze" && <>
+    <div style={{width:1,height:18,background:"#334155"}}/>
+    {translationSync.running && (
+     <span style={{fontSize:10,color:"#4ade80",background:"#081c0e",padding:"2px 8px",borderRadius:4,border:"1px solid #22c55e30"}}>
+      번역 동기화 {translationSync.done}/{translationSync.total}
+     </span>
+    )}
+    <div style={{display:"flex",background:"#1e293b",borderRadius:5,padding:2,border:"1px solid #334155"}}>
+     {[["basic","기본"],["extended","확장"]].map(([m,label])=>(
+      <button key={m} onClick={()=>setMode(m)} style={{padding:"3px 10px",borderRadius:3,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,fontFamily:"inherit",transition:"all 0.15s",
+       background:mode===m?(m==="extended"?"#2d1060":"#0f2d60"):"transparent",
+       color:mode===m?(m==="extended"?"#c084fc":"#60a5fa"):"#64748b"}}>{label}</button>
+     ))}
+    </div>
+   </>}
+  </div>
  </div>
 
- {/* -- 탭 콘텐츠 -- */}
+ {/* ── 탭 콘텐츠 ── */}
  <div style={{flex:1,overflow:"hidden"}}>
 
- {/* 문서 관리 탭 */}
- {appTab==="docs" && (
- <DocumentManagerTab
- onKBUpdated={handleKBUpdated}
- onOpenClause={setGlobalViewingClause}
- onAmendmentsFromUpload={(list) => {
- const merged = [...list, ...amendments.filter(a => !list.find(l=>l.id===a.id))];
- setAmendments(merged);
- }}
- />
- )}
+  {appTab==="docs" && (
+   <DocumentManagerTab
+    onKBUpdated={handleKBUpdated}
+    onOpenClause={setGlobalViewingClause}
+    onAmendmentsFromUpload={(list) => {
+     const merged = [...list, ...amendments.filter(a => !list.find(l=>l.id===a.id))];
+     setAmendments(merged);
+    }}
+   />
+  )}
 
- {/* 변경 이력 탭 */}
- {appTab==="timeline" && (
- <ClauseTimelineTab onOpenClause={setGlobalViewingClause}/>
- )}
+  {appTab==="timeline" && <ClauseTimelineTab onOpenClause={setGlobalViewingClause}/>}
+  {appTab==="hurdle" && <HurdleTracker/>}
 
- {/* 허들 트래커 탭 */}
- {appTab==="hurdle" && (
- <HurdleTracker/>
- )}
+  {appTab==="history" && (
+   <HistoryTab
+    history={history}
+    onSelect={h=>{ setActiveHistory(h.id); setAppTab("analyze"); }}
+    onDelete={deleteHistory}
+    onUpdateMemo={updateMemo}
+    onClear={clearHistory}
+   />
+  )}
 
- {/* 히스토리 탭 */}
- {appTab==="history" && (
- <HistoryTab
- history={history}
- onSelect={h=>{ setActiveHistory(h.id); setAppTab("analyze"); }}
- onDelete={deleteHistory}
- onUpdateMemo={updateMemo}
- onClear={clearHistory}
- />
- )}
+  {/* ── 이슈 분석 탭 ── */}
+  {appTab==="analyze" && (
+   <div style={{display:"grid",gridTemplateColumns:"280px 1fr",height:"100%"}}>
 
- {/* 이슈 분석 탭 */}
+    {/* 왼쪽 사이드바 */}
+    <div style={{background:"#0f172a",borderRight:"1px solid #334155",display:"flex",flexDirection:"column",overflow:"hidden"}}>
 
- {/* 이슈 분석 탭 */}
- {appTab==="analyze" && (
- <div style={{display:"grid",gridTemplateColumns:"290px 1fr",height:"100%"}}>
- {/* -- 왼쪽 사이드바 -- */}
- <div style={{background:"#0b1120",borderRight:"1px solid #1c2840",display:"flex",flexDirection:"column",overflow:"hidden"}}>
- {/* 입력 영역 */}
- <div style={{padding:16,borderBottom:"1px solid #1c2840"}}>
- <div style={{fontSize:10,fontWeight:600,color:"#3b6a9a",letterSpacing:"0.1em",marginBottom:8,fontFamily:"'JetBrains Mono',monospace"}}>SITUATION INPUT</div>
- <textarea value={input} onChange={e=>setInput(e.target.value)}
- onKeyDown={e=>(e.metaKey||e.ctrlKey)&&e.key==="Enter"&&analyze()}
- placeholder={"계약 관련 상황을 자유롭게 입력하세요.\n\n예) Palantir이 우리 고객에게 직접 접근했다\n 서비스가 갑자기 정지됐다"}
- style={{width:"100%",background:"#080e1c",border:"1px solid #1c2840",borderRadius:6,padding:"10px 12px",
- fontSize:12,color:"#c8d8ec",fontFamily:"'Noto Serif KR',serif",resize:"none",height:118,outline:"none",lineHeight:1.7,
- boxSizing:"border-box"}}/>
- <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
- <span style={{fontSize:9,color:"#1e3050",fontFamily:"'JetBrains Mono',monospace"}}>⌘+Enter</span>
- {rawDocCount>0 && <span style={{fontSize:9,fontWeight:700,color:"#22c55e",background:"#052010",border:"1px solid #22c55e33",borderRadius:3,padding:"1px 7px",fontFamily:"'JetBrains Mono',monospace"}}>원문 {rawDocCount}건 첨부</span>}
- <button onClick={analyze} disabled={!input.trim()||loading}
- style={{padding:"7px 20px",background:input.trim()&&!loading?"#1d4ed8":"#0d1825",
- border:`1px solid ${input.trim()&&!loading?"#3b82f644":"#1c2840"}`,borderRadius:5,fontSize:11,
- fontWeight:600,fontFamily:"'Noto Serif KR',serif",
- color:input.trim()&&!loading?"#93c5fd":"#2d4060",cursor:input.trim()&&!loading?"pointer":"default",
- transition:"all 0.15s"}}>
- 분석
- </button>
- </div>
- </div>
- {/* Amendment upload is managed only in 문서 관리 탭 to avoid split state */}
- <div style={{padding:"10px 16px",borderBottom:"1px solid #1c2840"}}>
- <div style={{fontSize:10,color:"#7a90aa",lineHeight:1.7,border:"1px solid #1c2840",borderRadius:6,padding:"8px 10px",background:"#0a101c"}}>
- Amendment 업로드는 문서 관리 탭에서만 지원됩니다.
- </div>
- </div>
- {/* 샘플 이슈 */}
- <div style={{padding:"10px 16px",borderBottom:"1px solid #1c2840"}}>
- <div style={{fontSize:9,fontWeight:700,color:"#2d4060",letterSpacing:"0.1em",marginBottom:7,fontFamily:"'JetBrains Mono',monospace"}}>SAMPLE ISSUES</div>
- {SAMPLE_ISSUES.map((s,i)=>(
- <button key={i} onClick={()=>setInput(s)}
- style={{textAlign:"left",background:"none",border:"1px solid #1c2840",borderRadius:4,padding:"5px 8px",
- marginBottom:4,fontSize:11,color:"#4a6080",cursor:"pointer",fontFamily:"'Noto Serif KR',serif",lineHeight:1.5,width:"100%",display:"block",
- transition:"all 0.1s"}}
- onMouseEnter={e=>{e.currentTarget.style.borderColor="#2a4a6a";e.currentTarget.style.color="#7db8f7";}}
- onMouseLeave={e=>{e.currentTarget.style.borderColor="#1c2840";e.currentTarget.style.color="#4a6080";}}>
- {s.length>42?s.slice(0,42)+"…":s}
- </button>
- ))}
- </div>
- {/* 히스토리 사이드바 */}
- <div style={{flex:1,overflowY:"auto",padding:"10px 16px"}}>
- {history.length>0 && <>
- <div style={{fontSize:9,fontWeight:700,color:"#2d4060",letterSpacing:"0.1em",marginBottom:7,fontFamily:"'JetBrains Mono',monospace"}}>HISTORY ({history.length})</div>
- {history.map(h=>{
- const rc=RISK_COLOR[h.result?.risk_level]||"#8899aa";
- return (
- <div key={h.id} onClick={()=>setActiveHistory(h.id===activeHistory?null:h.id)}
- style={{padding:"8px 10px",borderRadius:5,border:`1px solid ${activeHistory===h.id?rc+"44":"#1c2840"}`,
- background:activeHistory===h.id?rc+"0a":"transparent",cursor:"pointer",marginBottom:5,transition:"all 0.1s"}}>
- <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
- <div style={{width:5,height:5,borderRadius:"50%",background:rc,boxShadow:`0 0 4px ${rc}88`}}/>
- <span style={{fontSize:9,color:rc,fontWeight:700,fontFamily:"'JetBrains Mono',monospace"}}>{h.result?.risk_level}</span>
- {h.memo && <span style={{fontSize:8,color:"#a78bfa"}}>●</span>}
- <span style={{fontSize:9,color:"#2d4060",marginLeft:"auto"}}>{h.ts}</span>
- </div>
- <div style={{fontSize:11,color:"#5a7a9a",lineHeight:1.5,fontFamily:"'Noto Serif KR',serif"}}>{h.query.length>38?h.query.slice(0,38)+"…":h.query}</div>
- </div>
- );
- })}
- </>}
- </div>
- </div>
+     {/* 입력 영역 */}
+     <div style={{padding:"14px 16px",borderBottom:"1px solid #334155"}}>
+      <div style={{fontSize:10,fontWeight:600,color:"#64748b",letterSpacing:"0.1em",marginBottom:8,textTransform:"uppercase"}}>Situation Input</div>
+      <textarea value={input} onChange={e=>setInput(e.target.value)}
+       onKeyDown={e=>(e.metaKey||e.ctrlKey)&&e.key==="Enter"&&analyze()}
+       placeholder={"계약 관련 상황을 자유롭게 입력하세요.\n\n예) Palantir이 우리 고객에게 직접 접근했다\n 서비스가 갑자기 정지됐다"}
+       style={{width:"100%",background:"#1e293b",border:"1px solid #334155",borderRadius:6,padding:"10px 12px",
+        fontSize:12,color:"#e2e8f0",fontFamily:"inherit",resize:"none",height:120,outline:"none",lineHeight:1.7,
+        boxSizing:"border-box"}}/>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
+       <span style={{fontSize:10,color:"#334155"}}>⌘+Enter</span>
+       {rawDocCount>0 && <span style={{fontSize:10,fontWeight:600,color:"#4ade80",background:"#081c0e",border:"1px solid #22c55e30",borderRadius:4,padding:"1px 8px"}}>원문 {rawDocCount}건 첨부</span>}
+       <button onClick={analyze} disabled={!input.trim()||loading}
+        style={{padding:"7px 18px",background:input.trim()&&!loading?"#1d4ed8":"#1e293b",
+         border:`1px solid ${input.trim()&&!loading?"#3b82f660":"#334155"}`,borderRadius:5,fontSize:12,
+         fontWeight:600,fontFamily:"inherit",
+         color:input.trim()&&!loading?"#93c5fd":"#475569",cursor:input.trim()&&!loading?"pointer":"default",
+         transition:"all 0.15s"}}>
+        분석
+       </button>
+      </div>
+     </div>
 
- {/* -- 오른쪽 결과 영역 -- */}
- <div style={{overflowY:"auto",padding:24,background:"#080c14"}}>
- {loading && (
- <div style={{background:"#0b1120",border:"1px solid #1c2840",borderRadius:10,padding:40,textAlign:"center"}}>
- <div style={{fontSize:13,color:loadingMsg==="VERIFYING..."?"#a78bfa":"#4a6080",fontFamily:"'JetBrains Mono',monospace",letterSpacing:"0.1em"}}>{loadingMsg}</div>
- {loadingMsg==="VERIFYING..." && <div style={{fontSize:10,color:"#6644aa",marginTop:4,fontFamily:"'Noto Serif KR',serif"}}>Devil's Advocate 검증 중...</div>}
- <div style={{display:"flex",justifyContent:"center",gap:6,marginTop:12}}>
- {[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:loadingMsg==="VERIFYING..."?"#a78bfa":"#3b82f6",animation:"bounce 0.8s ease-in-out infinite",animationDelay:`${i*0.2}s`}}/>)}
- </div>
- </div>
- )}
- {error && (
- <div style={{background:"#140a0a",border:"1px solid #ef444433",borderRadius:8,padding:"12px 16px",fontSize:12,color:"#f87171",fontFamily:"'JetBrains Mono',monospace"}}>
- {error}
- </div>
- )}
- {current && !loading && (
- <div>
- <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
- <span style={{fontSize:9,color:"#2d4060",fontFamily:"'JetBrains Mono',monospace",letterSpacing:"0.08em"}}>ISSUE</span>
- <span style={{fontSize:12,color:"#7a9abf",background:"#0b1120",border:"1px solid #1c2840",borderRadius:4,padding:"2px 10px",fontFamily:"'Noto Serif KR',serif",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{current.query}</span>
- <span style={{fontSize:9,fontWeight:700,color:current.mode==="extended"?"#c084fc":"#7db8f7",background:current.mode==="extended"?"#1e105044":"#1a2e4a",border:`1px solid ${current.mode==="extended"?"#c084fc33":"#3b82f633"}`,borderRadius:3,padding:"2px 8px",fontFamily:"'JetBrains Mono',monospace"}}>{current.mode==="extended"?"확장":"기본"}</span>
- </div>
- <ErrorBoundary><AnalysisResult result={current.result} query={current.query} mode={current.mode} amendments={amendments} onOpenClause={setGlobalViewingClause}/></ErrorBoundary>
- </div>
- )}
- {!current && !loading && (
- <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"70%",gap:16}}>
- <div style={{width:56,height:56,borderRadius:12,background:"linear-gradient(135deg,#0d1e38,#1a2e4a)",border:"1px solid #1c2840",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,opacity:0.5}}>⚖</div>
- <div style={{fontSize:13,color:"#2d4060",textAlign:"center",lineHeight:2,fontFamily:"'Noto Serif KR',serif"}}>
- 상황을 입력하면 관련 조항, 법적 효과, 즉각 조치를 분석합니다<br/>
- <span style={{fontSize:11,color:"#1e3050"}}>KB 조항 {kbSummary.clauses}개 · 충돌 {kbSummary.conflicts}건</span>
- </div>
- </div>
- )}
- </div>
- </div>
- )}
+     <div style={{padding:"10px 16px",borderBottom:"1px solid #334155"}}>
+      <div style={{fontSize:11,color:"#64748b",lineHeight:1.7,border:"1px solid #334155",borderRadius:6,padding:"8px 10px",background:"#1e293b"}}>
+       Amendment 업로드는 문서 관리 탭에서만 지원됩니다.
+      </div>
+     </div>
+
+     {/* 샘플 이슈 */}
+     <div style={{padding:"10px 16px",borderBottom:"1px solid #334155"}}>
+      <div style={{fontSize:10,fontWeight:600,color:"#64748b",letterSpacing:"0.1em",marginBottom:8,textTransform:"uppercase"}}>Sample Issues</div>
+      {SAMPLE_ISSUES.map((s,i)=>(
+       <button key={i} onClick={()=>setInput(s)}
+        style={{textAlign:"left",background:"none",border:"1px solid #334155",borderRadius:5,padding:"6px 10px",
+         marginBottom:4,fontSize:11,color:"#64748b",cursor:"pointer",fontFamily:"inherit",lineHeight:1.5,width:"100%",display:"block",
+         transition:"all 0.1s"}}
+        onMouseEnter={e=>{e.currentTarget.style.borderColor="#475569";e.currentTarget.style.color="#cbd5e1";}}
+        onMouseLeave={e=>{e.currentTarget.style.borderColor="#334155";e.currentTarget.style.color="#64748b";}}>
+        {s.length>42?s.slice(0,42)+"…":s}
+       </button>
+      ))}
+     </div>
+
+     {/* 히스토리 미니 목록 */}
+     <div style={{flex:1,overflowY:"auto",padding:"10px 16px"}}>
+      {history.length>0 && <>
+       <div style={{fontSize:10,fontWeight:600,color:"#64748b",letterSpacing:"0.1em",marginBottom:8,textTransform:"uppercase"}}>History ({history.length})</div>
+       {history.map(h=>{
+        const rc=RISK_COLOR[h.result?.risk_level]||"#94a3b8";
+        return (
+         <div key={h.id} onClick={()=>setActiveHistory(h.id===activeHistory?null:h.id)}
+          style={{padding:"9px 10px",borderRadius:6,border:`1px solid ${activeHistory===h.id?rc+"55":"#334155"}`,
+           background:activeHistory===h.id?rc+"0c":"#1e293b",cursor:"pointer",marginBottom:5,transition:"all 0.1s"}}>
+          <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
+           <div style={{width:5,height:5,borderRadius:"50%",background:rc,flexShrink:0}}/>
+           <span style={{fontSize:10,color:rc,fontWeight:700}}>{h.result?.risk_level}</span>
+           {h.memo && <span style={{fontSize:8,color:"#a78bfa"}}>●</span>}
+           <span style={{fontSize:10,color:"#475569",marginLeft:"auto"}}>{h.ts}</span>
+          </div>
+          <div style={{fontSize:11,color:"#94a3b8",lineHeight:1.5}}>{h.query.length>38?h.query.slice(0,38)+"…":h.query}</div>
+         </div>
+        );
+       })}
+      </>}
+     </div>
+    </div>
+
+    {/* 오른쪽 결과 영역 */}
+    <div style={{overflowY:"auto",padding:24,background:"#020617"}}>
+     {loading && (
+      <div style={{background:"#0f172a",border:"1px solid #334155",borderRadius:10,padding:40,textAlign:"center"}}>
+       <div style={{fontSize:13,color:loadingMsg==="VERIFYING..."?"#a78bfa":"#64748b",letterSpacing:"0.1em"}}>{loadingMsg}</div>
+       {loadingMsg==="VERIFYING..." && <div style={{fontSize:11,color:"#7c3aed",marginTop:4}}>Devil's Advocate 검증 중...</div>}
+       <div style={{display:"flex",justifyContent:"center",gap:6,marginTop:14}}>
+        {[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:loadingMsg==="VERIFYING..."?"#a78bfa":"#3b82f6",animation:"bounce 0.8s ease-in-out infinite",animationDelay:`${i*0.2}s`}}/>)}
+       </div>
+      </div>
+     )}
+     {error && (
+      <div style={{background:"#1c0808",border:"1px solid #ef444430",borderRadius:8,padding:"12px 16px",fontSize:12,color:"#f87171"}}>
+       {error}
+      </div>
+     )}
+     {current && !loading && (
+      <div>
+       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+        <span style={{fontSize:10,color:"#475569",letterSpacing:"0.08em",textTransform:"uppercase"}}>이슈</span>
+        <span style={{fontSize:12,color:"#94a3b8",background:"#0f172a",border:"1px solid #334155",borderRadius:5,padding:"3px 10px",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{current.query}</span>
+        <span style={{fontSize:11,fontWeight:600,color:current.mode==="extended"?"#c084fc":"#60a5fa",background:current.mode==="extended"?"#1e106044":"#0f2d6044",border:`1px solid ${current.mode==="extended"?"#c084fc33":"#3b82f633"}`,borderRadius:4,padding:"3px 10px"}}>{current.mode==="extended"?"확장":"기본"}</span>
+       </div>
+       <ErrorBoundary><AnalysisResult result={current.result} query={current.query} mode={current.mode} amendments={amendments} onOpenClause={setGlobalViewingClause}/></ErrorBoundary>
+      </div>
+     )}
+     {!current && !loading && (
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"70%",gap:16}}>
+       <div style={{width:52,height:52,borderRadius:12,background:"#0f172a",border:"1px solid #334155",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,opacity:0.4}}>⚖</div>
+       <div style={{fontSize:13,color:"#475569",textAlign:"center",lineHeight:2}}>
+        상황을 입력하면 관련 조항, 법적 효과, 즉각 조치를 분석합니다<br/>
+        <span style={{fontSize:11,color:"#334155"}}>KB 조항 {kbSummary.clauses}개 · 충돌 {kbSummary.conflicts}건</span>
+       </div>
+      </div>
+     )}
+    </div>
+   </div>
+  )}
  </div>
  {globalViewingClause && <ClauseDrawer clauseId={globalViewingClause} onClose={()=>setGlobalViewingClause(null)}/>}
- <style>{`@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}} *{box-sizing:border-box} ::-webkit-scrollbar{width:5px;height:5px} ::-webkit-scrollbar-track{background:#080c14} ::-webkit-scrollbar-thumb{background:#1c2840;border-radius:3px} ::selection{background:#1d4ed844;color:#93c5fd} textarea::placeholder{color:#2d4060}`}</style>
+ <style>{`@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}} *{box-sizing:border-box} ::-webkit-scrollbar{width:5px;height:5px} ::-webkit-scrollbar-track{background:#020617} ::-webkit-scrollbar-thumb{background:#334155;border-radius:3px} ::-webkit-scrollbar-thumb:hover{background:#475569} ::selection{background:#1d4ed844;color:#93c5fd} textarea::placeholder{color:#475569} input::placeholder{color:#475569}`}</style>
  </div>
  );
 }
@@ -1846,17 +1838,17 @@ function ReportButton({ result, query, mode }) {
     <>
       <div style={{display:"flex", gap:8, justifyContent:"flex-end", marginTop:12}}>
         <button onClick={() => setShowModal(true)}
-          style={{...btnBase, background:"#0b1120", border:"1px solid #1c2840", color:"#4a6080"}}>
+          style={{...btnBase, background:"#1e293b", border:"1px solid #334155", color:"#94a3b8", fontFamily:"inherit"}}>
           리포트 보기
         </button>
         <button onClick={handleDownload}
-          style={{...btnBase, background:"#102040", border:"1px solid #1d4ed844", color:"#7db8f7"}}>
+          style={{...btnBase, background:"#1e3a6e", border:"1px solid #3b82f640", color:"#93c5fd", fontFamily:"inherit"}}>
           HTML 저장 후 출력
         </button>
       </div>
 
       {showModal && (
-        <div style={{position:"fixed",inset:0,background:"rgba(4,8,20,0.92)",zIndex:9999,display:"flex",flexDirection:"column"}}>
+        <div style={{position:"fixed",inset:0,background:"rgba(2,6,23,0.95)",zIndex:9999,display:"flex",flexDirection:"column"}}>
           <iframe
             srcDoc={reportHtml}
             style={{flex:1, border:"none", background:"#fff"}}
@@ -2626,57 +2618,53 @@ function ClauseDrawer({ clauseId, onClose }) {
  const displayData = data || kbClause;
 
  return (
- <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:100,background:"#0a0a14",borderTop:`2px solid ${docColor}44`,boxShadow:"0 -8px 32px #00000088",maxHeight:"75vh",display:"flex",flexDirection:"column"}}>
- <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 20px",borderBottom:"1px solid #1a1a2e",flexShrink:0}}>
- <span style={{fontSize:10,fontWeight:700,color:docColor,background:docColor+"18",padding:"2px 8px",borderRadius:3}}>{displayData?.doc}</span>
- <span style={{fontSize:11,fontWeight:600,color:"#c8d0dc"}}>{displayData?.section}</span>
- <span style={{fontSize:12,color:"#e2e8f0",fontWeight:500}}>{displayData?.title}</span>
- <button onClick={onClose} style={{marginLeft:"auto",background:"none",border:"1px solid #1e2030",borderRadius:4,padding:"3px 10px",fontSize:11,color:"#8899aa",cursor:"pointer",fontFamily:"inherit"}}>{"닫기 ×"}</button>
- </div>
- <div style={{overflowY:"auto",padding:"14px 20px",display:"grid",gridTemplateColumns:hasTranslation?"1fr 1fr 1fr":"1fr 1fr",gap:16,width:"100%"}}>
- <div>
- <div style={{fontSize:10,color:"#6677aa",letterSpacing:"0.08em",marginBottom:8}}>{"조항 원문 (English)"}</div>
- <pre style={{fontSize:11,color:"#c8d0dc",lineHeight:1.8,whiteSpace:"pre-wrap",fontFamily:"'JetBrains Mono',monospace",margin:0,background:"#07070f",padding:"12px 14px",borderRadius:6,border:"1px solid #1a1a2e"}}>{displayData?.text || "원문 데이터 없음"}</pre>
- </div>
- {hasTranslation ? (
- <div>
- <div style={{fontSize:10,color:"#6677aa",letterSpacing:"0.08em",marginBottom:8}}>{"한국어 번역"}</div>
- <div style={{fontSize:11,color:"#c8d0dc",lineHeight:1.9,background:"#07070f",padding:"12px 14px",borderRadius:6,border:`1px solid ${docColor}22`}}>
- {renderBoldLines(fullTranslation)}
- </div>
- {translationBusy && <div style={{marginTop:7,fontSize:10,color:"#7db8f7"}}>전문 번역 생성 중...</div>}
- {translationErr && <div style={{marginTop:7,fontSize:10,color:"#f87171"}}>{translationErr}</div>}
- <button
-  onClick={handleRegenerateTranslation}
-  disabled={translationBusy || !displayData?.text}
-  style={{marginTop:8,fontSize:10,color:docColor,background:docColor+"12",border:`1px solid ${docColor}33`,borderRadius:4,padding:"4px 10px",cursor:(translationBusy || !displayData?.text)?"not-allowed":"pointer",fontFamily:"inherit",opacity:(translationBusy || !displayData?.text)?0.6:1}}
- >
-  전문완역 다시 생성
- </button>
- </div>
- ) : (
- <div>
- <div style={{fontSize:10,color:"#6677aa",letterSpacing:"0.08em",marginBottom:8}}>{"한국어 번역"}</div>
- <div style={{fontSize:11,color:"#9aaabb",lineHeight:1.8,background:"#07070f",padding:"12px 14px",borderRadius:6,border:`1px solid ${docColor}22`}}>
- {translationBusy ? "전문 번역 생성 중..." : "번역 데이터 없음"}
- </div>
- {translationErr && <div style={{marginTop:7,fontSize:10,color:"#f87171"}}>{translationErr}</div>}
- {!translationBusy && (
- <button
-  onClick={handleRegenerateTranslation}
-  disabled={!displayData?.text}
-  style={{marginTop:8,fontSize:10,color:docColor,background:docColor+"12",border:`1px solid ${docColor}33`,borderRadius:4,padding:"4px 10px",cursor:!displayData?.text?"not-allowed":"pointer",fontFamily:"inherit",opacity:!displayData?.text?0.6:1}}
- >
-  전문완역 생성
- </button>
- )}
- </div>
- )}
- <div>
- <div style={{fontSize:10,color:"#6677aa",letterSpacing:"0.08em",marginBottom:8}}>KT 리스크</div>
- <div style={{fontSize:11,color:"#f87171",lineHeight:1.8,background:"#07070f",padding:"12px 14px",borderRadius:6,border:`1px solid ${docColor}22`}}>{ktRisk || "-"}</div>
- </div>
- </div>
+ <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:100,background:"#0f172a",borderTop:`2px solid ${docColor}55`,boxShadow:"0 -8px 32px rgba(0,0,0,0.6)",maxHeight:"75vh",display:"flex",flexDirection:"column"}}>
+  <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 20px",borderBottom:"1px solid #334155",flexShrink:0}}>
+   <span style={{fontSize:10,fontWeight:700,color:docColor,background:docColor+"18",padding:"3px 9px",borderRadius:4,border:`1px solid ${docColor}33`}}>{displayData?.doc}</span>
+   <span style={{fontSize:11,fontWeight:600,color:"#94a3b8"}}>{displayData?.section}</span>
+   <span style={{fontSize:13,color:"#e2e8f0",fontWeight:500}}>{displayData?.title}</span>
+   <button onClick={onClose}
+    style={{marginLeft:"auto",background:"none",border:"1px solid #334155",borderRadius:5,padding:"4px 12px",fontSize:12,color:"#64748b",cursor:"pointer",fontFamily:"inherit"}}
+    onMouseEnter={e=>e.currentTarget.style.color="#e2e8f0"} onMouseLeave={e=>e.currentTarget.style.color="#64748b"}>닫기 ×</button>
+  </div>
+  <div style={{overflowY:"auto",padding:"16px 20px",display:"grid",gridTemplateColumns:hasTranslation?"1fr 1fr 1fr":"1fr 1fr",gap:16,width:"100%"}}>
+   <div>
+    <div style={{fontSize:10,fontWeight:600,color:"#64748b",letterSpacing:"0.08em",marginBottom:8,textTransform:"uppercase"}}>조항 원문 (English)</div>
+    <pre style={{fontSize:12,color:"#cbd5e1",lineHeight:1.8,whiteSpace:"pre-wrap",fontFamily:"ui-monospace,'Cascadia Code','Fira Code',monospace",margin:0,background:"#1e293b",padding:"12px 14px",borderRadius:6,border:"1px solid #334155"}}>{displayData?.text || "원문 데이터 없음"}</pre>
+   </div>
+   {hasTranslation ? (
+    <div>
+     <div style={{fontSize:10,fontWeight:600,color:"#64748b",letterSpacing:"0.08em",marginBottom:8,textTransform:"uppercase"}}>한국어 번역</div>
+     <div style={{fontSize:12,color:"#cbd5e1",lineHeight:1.9,background:"#1e293b",padding:"12px 14px",borderRadius:6,border:`1px solid ${docColor}33`}}>
+      {renderBoldLines(fullTranslation)}
+     </div>
+     {translationBusy && <div style={{marginTop:7,fontSize:11,color:"#60a5fa"}}>전문 번역 생성 중...</div>}
+     {translationErr && <div style={{marginTop:7,fontSize:11,color:"#f87171"}}>{translationErr}</div>}
+     <button onClick={handleRegenerateTranslation} disabled={translationBusy || !displayData?.text}
+      style={{marginTop:8,fontSize:11,color:docColor,background:docColor+"12",border:`1px solid ${docColor}33`,borderRadius:5,padding:"5px 12px",cursor:(translationBusy||!displayData?.text)?"not-allowed":"pointer",fontFamily:"inherit",opacity:(translationBusy||!displayData?.text)?0.5:1}}>
+      전문완역 다시 생성
+     </button>
+    </div>
+   ) : (
+    <div>
+     <div style={{fontSize:10,fontWeight:600,color:"#64748b",letterSpacing:"0.08em",marginBottom:8,textTransform:"uppercase"}}>한국어 번역</div>
+     <div style={{fontSize:12,color:"#94a3b8",lineHeight:1.8,background:"#1e293b",padding:"12px 14px",borderRadius:6,border:`1px solid ${docColor}33`}}>
+      {translationBusy ? "전문 번역 생성 중..." : "번역 데이터 없음"}
+     </div>
+     {translationErr && <div style={{marginTop:7,fontSize:11,color:"#f87171"}}>{translationErr}</div>}
+     {!translationBusy && (
+      <button onClick={handleRegenerateTranslation} disabled={!displayData?.text}
+       style={{marginTop:8,fontSize:11,color:docColor,background:docColor+"12",border:`1px solid ${docColor}33`,borderRadius:5,padding:"5px 12px",cursor:!displayData?.text?"not-allowed":"pointer",fontFamily:"inherit",opacity:!displayData?.text?0.5:1}}>
+       전문완역 생성
+      </button>
+     )}
+    </div>
+   )}
+   <div>
+    <div style={{fontSize:10,fontWeight:600,color:"#64748b",letterSpacing:"0.08em",marginBottom:8,textTransform:"uppercase"}}>KT 리스크</div>
+    <div style={{fontSize:12,color:"#fca5a5",lineHeight:1.8,background:"#1e293b",padding:"12px 14px",borderRadius:6,border:"1px solid #334155"}}>{ktRisk || "-"}</div>
+   </div>
+  </div>
  </div>
  );
 }
@@ -2687,20 +2675,20 @@ function ClauseCard({ clause, onViewFull }) {
  const hasFullText = !!CLAUSE_FULLTEXT[clause.clause_id];
  const urgColor = URGENCY_COL[urg] || "#7db8f7";
  return (
- <div style={{background:"#0b1120",border:"1px solid #1c2840",borderRadius:7,padding:"12px 14px",marginBottom:8}}>
- <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:7}}>
- <span style={{fontSize:10,fontWeight:800,color:docColor,background:docColor+"1a",padding:"2px 8px",borderRadius:3,fontFamily:"'JetBrains Mono',monospace",border:`1px solid ${docColor}33`}}>{clause.clause_id||clause.id}</span>
- <span style={{fontSize:12,fontWeight:600,color:"#c8d8ec",fontFamily:"'Noto Serif KR',serif"}}>{clause.topic}</span>
- {(()=>{const kb=CONTRACT_KB.clauses.find(c=>c.id===clause.clause_id);return kb?._amended?<span style={{fontSize:9,color:"#fbbf24",background:"#2a1f08",padding:"1px 6px",borderRadius:3,border:"1px solid #f59e0b33",fontFamily:"'JetBrains Mono',monospace"}}>AMD</span>:null;})()}
- <span style={{marginLeft:"auto",fontSize:9,fontWeight:700,color:urgColor,background:urgColor+"18",padding:"2px 7px",borderRadius:3,border:`1px solid ${urgColor}33`,fontFamily:"'JetBrains Mono',monospace"}}>{urg}</span>
- </div>
- <div style={{fontSize:12,color:"#6a8aaa",marginBottom:7,lineHeight:1.6,fontFamily:"'Noto Serif KR',serif"}}>{clause.relevance}</div>
- {clause.kt_position && <div style={{fontSize:12,color:"#7db8f7",background:"#0d1825",padding:"7px 10px",borderRadius:5,borderLeft:`2px solid #3b82f644`,lineHeight:1.6,fontFamily:"'Noto Serif KR',serif"}}>{clause.kt_position}</div>}
- {hasFullText && (
- <button onClick={()=>onViewFull(clause.clause_id)} style={{marginTop:8,fontSize:10,color:docColor,background:docColor+"0d",border:`1px solid ${docColor}33`,borderRadius:4,padding:"3px 10px",cursor:"pointer",fontFamily:"'JetBrains Mono',monospace",fontWeight:600}}>
- 원문 보기 →
- </button>
- )}
+ <div style={{background:"#0f172a",border:"1px solid #334155",borderRadius:8,padding:"14px 16px",marginBottom:8}}>
+  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+   <span style={{fontSize:11,fontWeight:700,color:docColor,background:docColor+"18",padding:"3px 9px",borderRadius:4,border:`1px solid ${docColor}33`}}>{clause.clause_id||clause.id}</span>
+   <span style={{fontSize:13,fontWeight:600,color:"#e2e8f0"}}>{clause.topic}</span>
+   {(()=>{const kb=CONTRACT_KB.clauses.find(c=>c.id===clause.clause_id);return kb?._amended?<span style={{fontSize:10,color:"#fbbf24",background:"rgba(245,158,11,0.12)",padding:"2px 7px",borderRadius:4,border:"1px solid #f59e0b33"}}>AMD</span>:null;})()}
+   <span style={{marginLeft:"auto",fontSize:10,fontWeight:600,color:urgColor,background:urgColor+"18",padding:"3px 8px",borderRadius:4,border:`1px solid ${urgColor}33`}}>{urg}</span>
+  </div>
+  <div style={{fontSize:12,color:"#94a3b8",marginBottom:8,lineHeight:1.7}}>{clause.relevance}</div>
+  {clause.kt_position && <div style={{fontSize:12,color:"#93c5fd",background:"#1e293b",padding:"8px 12px",borderRadius:6,borderLeft:"2px solid #3b82f6",lineHeight:1.7}}>{clause.kt_position}</div>}
+  {hasFullText && (
+   <button onClick={()=>onViewFull(clause.clause_id)} style={{marginTop:10,fontSize:11,color:docColor,background:docColor+"12",border:`1px solid ${docColor}33`,borderRadius:5,padding:"4px 12px",cursor:"pointer",fontFamily:"inherit",fontWeight:600,transition:"opacity 0.15s"}}>
+    원문 보기 →
+   </button>
+  )}
  </div>
  );
 }
@@ -2710,31 +2698,31 @@ function ActionCard({ action, index, onOpen }) {
  const color = STEP_COLORS[index % STEP_COLORS.length];
  const clauseIds = (action.clauses||"").split(",").map(s=>s.trim()).filter(s=>s && s!=="없음");
  return (
- <div style={{display:"flex",gap:12,padding:"12px 14px",background:"#0b1120",borderRadius:7,border:`1px solid ${color}22`,marginBottom:8,borderLeft:`3px solid ${color}88`}}>
- <div style={{minWidth:60,textAlign:"center",flexShrink:0}}>
- <div style={{fontSize:9,fontWeight:800,color,background:color+"18",padding:"3px 7px",borderRadius:4,marginBottom:4,fontFamily:"'JetBrains Mono',monospace",border:`1px solid ${color}33`}}>{action.step||`STEP ${index+1}`}</div>
- <div style={{fontSize:9,color:"#2d4060",lineHeight:1.4,fontFamily:"'JetBrains Mono',monospace"}}>{action.timeframe}</div>
- </div>
- <div style={{flex:1}}>
- <div style={{fontSize:13,color:"#a0b8d0",lineHeight:1.75,marginBottom:clauseIds.length>0?8:0,fontFamily:"'Noto Serif KR',serif"}}>
- {linkifyClauses(action.action, onOpen)}
- </div>
- {clauseIds.length>0 && (
- <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
- {clauseIds.map(cid=>{
- const kb = CONTRACT_KB.clauses.find(c=>c.id===cid);
- const dc = DOC_COLOR[kb?.doc] || "#7db8f7";
- return (
- <span key={cid} onClick={()=>onOpen&&onOpen(cid)}
- style={{fontSize:9,fontWeight:700,color:dc,background:dc+"14",border:`1px solid ${dc}44`,borderRadius:3,padding:"2px 7px",cursor:"pointer",fontFamily:"'JetBrains Mono',monospace"}}
- title={kb ? kb.topic : cid}>
- {cid}
- </span>
- );
- })}
- </div>
- )}
- </div>
+ <div style={{display:"flex",gap:12,padding:"14px 16px",background:"#0f172a",borderRadius:8,border:`1px solid #334155`,marginBottom:8,borderLeft:`3px solid ${color}`}}>
+  <div style={{minWidth:60,textAlign:"center",flexShrink:0}}>
+   <div style={{fontSize:10,fontWeight:700,color,background:color+"18",padding:"3px 8px",borderRadius:4,marginBottom:4,border:`1px solid ${color}33`}}>{action.step||`STEP ${index+1}`}</div>
+   <div style={{fontSize:10,color:"#64748b",lineHeight:1.4}}>{action.timeframe}</div>
+  </div>
+  <div style={{flex:1}}>
+   <div style={{fontSize:13,color:"#cbd5e1",lineHeight:1.8,marginBottom:clauseIds.length>0?10:0}}>
+    {linkifyClauses(action.action, onOpen)}
+   </div>
+   {clauseIds.length>0 && (
+    <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+     {clauseIds.map(cid=>{
+      const kb = CONTRACT_KB.clauses.find(c=>c.id===cid);
+      const dc = DOC_COLOR[kb?.doc] || "#60a5fa";
+      return (
+       <span key={cid} onClick={()=>onOpen&&onOpen(cid)}
+        style={{fontSize:10,fontWeight:600,color:dc,background:dc+"14",border:`1px solid ${dc}40`,borderRadius:4,padding:"2px 8px",cursor:"pointer"}}
+        title={kb ? kb.topic : cid}>
+        {cid}
+       </span>
+      );
+     })}
+    </div>
+   )}
+  </div>
  </div>
  );
 }
@@ -4316,39 +4304,43 @@ function FollowupChat({ result, mode, amendments=[], onOpenClause }) {
  };
 
  return (
- <div style={{background:"#0a0a14",border:"1px solid #1e2030",borderRadius:8,overflow:"hidden"}}>
- <div style={{padding:"10px 14px",borderBottom:"1px solid #1a1a2e",display:"flex",alignItems:"center",gap:8}}>
- <div style={{width:6,height:6,borderRadius:"50%",background:"#60a5fa",boxShadow:"0 0 6px #60a5fa"}}/>
- <span style={{fontSize:11,color:"#8899aa",letterSpacing:"0.08em"}}>후속 질문</span>
- <span style={{fontSize:10,color:"#475569"}}>{"어떤 탭에서든 분석 내용에 대해 자유롭게 질문하세요"}</span>
- </div>
- {messages.length > 0 && (
- <div style={{maxHeight:280,overflowY:"auto",padding:"12px 14px",display:"flex",flexDirection:"column",gap:8}}>
- {messages.map((m,i)=>(
- <div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start"}}>
- <div style={{maxWidth:"85%",padding:"8px 12px",borderRadius:6,background:m.role==="user"?"#0f1e35":"#0f0f1a",border:`1px solid ${m.role==="user"?"#1e3a5f":"#1e2030"}`,fontSize:13,color:"#c8d0dc",lineHeight:1.7,whiteSpace:"pre-wrap"}}>
- {m.content.split("\n").map((line, idx) => (
- <span key={idx}>{linkifyClauses(line, onOpenClause)}{idx < m.content.split("\n").length - 1 && <br/>}</span>
- ))}
- </div>
- </div>
- ))}
- {loading && <div style={{display:"flex",justifyContent:"flex-start"}}><div style={{background:"#0f0f1a",border:"1px solid #1e2030",borderRadius:6,padding:"4px 8px"}}><TypingDots/></div></div>}
- <div ref={bottomRef}/>
- </div>
- )}
- <div style={{padding:"10px 12px",borderTop: messages.length>0 ? "1px solid #1a1a2e" : "none",display:"flex",gap:8}}>
- <input
- value={input}
- onChange={e=>setInput(e.target.value)}
- onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&send()}
- placeholder="이 분석에 대해 추가 질문..."
- style={{flex:1,background:"#07070f",border:"1px solid #1e2030",borderRadius:4,padding:"7px 10px",fontSize:11,color:"#e2e8f0",fontFamily:"inherit",outline:"none"}}
- />
- <button onClick={send} disabled={!input.trim()||loading} style={{padding:"7px 14px",background:input.trim()&&!loading?"#1e3a6e":"#0f1525",border:`1px solid ${input.trim()&&!loading?"#60a5fa44":"#1e2030"}`,borderRadius:4,fontSize:11,color:input.trim()&&!loading?"#60a5fa":"#6677aa",cursor:input.trim()&&!loading?"pointer":"not-allowed",fontFamily:"inherit"}}>
- 전송
- </button>
- </div>
+ <div style={{background:"#0f172a",border:"1px solid #334155",borderRadius:8,overflow:"hidden"}}>
+  <div style={{padding:"10px 16px",borderBottom:"1px solid #334155",display:"flex",alignItems:"center",gap:8}}>
+   <div style={{width:6,height:6,borderRadius:"50%",background:"#60a5fa",flexShrink:0}}/>
+   <span style={{fontSize:12,color:"#94a3b8",fontWeight:500}}>후속 질문</span>
+   <span style={{fontSize:11,color:"#475569"}}>분석 내용에 대해 자유롭게 질문하세요</span>
+  </div>
+  {messages.length > 0 && (
+   <div style={{maxHeight:280,overflowY:"auto",padding:"12px 16px",display:"flex",flexDirection:"column",gap:8}}>
+    {messages.map((m,i)=>(
+     <div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start"}}>
+      <div style={{maxWidth:"85%",padding:"9px 13px",borderRadius:8,
+       background:m.role==="user"?"#1e3a6e":"#1e293b",
+       border:`1px solid ${m.role==="user"?"#3b82f640":"#334155"}`,
+       fontSize:13,color:"#e2e8f0",lineHeight:1.75,whiteSpace:"pre-wrap"}}>
+       {m.content.split("\n").map((line, idx) => (
+        <span key={idx}>{linkifyClauses(line, onOpenClause)}{idx < m.content.split("\n").length - 1 && <br/>}</span>
+       ))}
+      </div>
+     </div>
+    ))}
+    {loading && <div style={{display:"flex",justifyContent:"flex-start"}}><div style={{background:"#1e293b",border:"1px solid #334155",borderRadius:8,padding:"6px 10px"}}><TypingDots/></div></div>}
+    <div ref={bottomRef}/>
+   </div>
+  )}
+  <div style={{padding:"10px 14px",borderTop:messages.length>0?"1px solid #334155":"none",display:"flex",gap:8}}>
+   <input
+    value={input}
+    onChange={e=>setInput(e.target.value)}
+    onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&send()}
+    placeholder="이 분석에 대해 추가 질문..."
+    style={{flex:1,background:"#1e293b",border:"1px solid #334155",borderRadius:6,padding:"8px 12px",fontSize:12,color:"#e2e8f0",fontFamily:"inherit",outline:"none"}}
+   />
+   <button onClick={send} disabled={!input.trim()||loading}
+    style={{padding:"8px 16px",background:input.trim()&&!loading?"#1d4ed8":"#1e293b",border:`1px solid ${input.trim()&&!loading?"#3b82f660":"#334155"}`,borderRadius:6,fontSize:12,fontWeight:600,color:input.trim()&&!loading?"#93c5fd":"#475569",cursor:input.trim()&&!loading?"pointer":"not-allowed",fontFamily:"inherit",transition:"all 0.15s"}}>
+    전송
+   </button>
+  </div>
  </div>
  );
 }
@@ -5542,163 +5534,144 @@ function HistoryTab({ history, onSelect, onDelete, onUpdateMemo, onClear }) {
  const selected = history.find(h => h.id === selectedId);
 
  return (
- <div style={{display:"grid", gridTemplateColumns:"320px 1fr", height:"100%", overflow:"hidden"}}>
+ <div style={{display:"grid", gridTemplateColumns:"300px 1fr", height:"100%", overflow:"hidden"}}>
 
- {/* -- 왼쪽: 목록 -- */}
- <div style={{borderRight:"1px solid #1a1a2e", display:"flex", flexDirection:"column", overflow:"hidden", background:"#0a0a14"}}>
+  {/* ── 왼쪽: 목록 ── */}
+  <div style={{borderRight:"1px solid #334155", display:"flex", flexDirection:"column", overflow:"hidden", background:"#0f172a"}}>
 
- {/* 검색 + 필터 */}
- <div style={{padding:"12px 14px", borderBottom:"1px solid #1a1a2e"}}>
- <input
- value={search} onChange={e=>setSearch(e.target.value)}
- placeholder="이슈 내용, 메모 검색..."
- style={{width:"100%", background:"#0f0f1a", border:"1px solid #1e2030", borderRadius:4,
- padding:"6px 10px", fontSize:10, color:"#e2e8f0", fontFamily:"inherit",
- outline:"none", boxSizing:"border-box", marginBottom:8}}
- />
- <div style={{display:"flex", gap:4}}>
- {[["all","전체"], ["HIGH","HIGH"], ["MEDIUM","MED"], ["LOW","LOW"]].map(([v,label]) => {
- const c = v==="HIGH"?"#ff2d20":v==="MEDIUM"?"#f59e0b":v==="LOW"?"#10b981":"#8899aa";
- return (
- <button key={v} onClick={()=>setFilter(v)}
- style={{flex:1, padding:"4px 0", borderRadius:3, border:`1px solid ${filter===v?c+"88":"#1e2030"}`,
- background:filter===v?c+"15":"transparent", color:filter===v?c:"#6677aa",
- fontSize:9, fontWeight:700, cursor:"pointer", fontFamily:"inherit"}}>
- {label}
- </button>
- );
- })}
- </div>
- </div>
+   {/* 검색 + 필터 */}
+   <div style={{padding:"12px 14px", borderBottom:"1px solid #334155"}}>
+    <input value={search} onChange={e=>setSearch(e.target.value)}
+     placeholder="이슈 내용, 메모 검색..."
+     style={{width:"100%", background:"#1e293b", border:"1px solid #334155", borderRadius:5,
+      padding:"7px 11px", fontSize:11, color:"#e2e8f0", fontFamily:"inherit",
+      outline:"none", boxSizing:"border-box", marginBottom:8}}
+    />
+    <div style={{display:"flex", gap:4}}>
+     {[["all","전체"], ["HIGH","HIGH"], ["MEDIUM","MED"], ["LOW","LOW"]].map(([v,label]) => {
+      const c = v==="HIGH"?"#ef4444":v==="MEDIUM"?"#f59e0b":v==="LOW"?"#22c55e":"#94a3b8";
+      return (
+       <button key={v} onClick={()=>setFilter(v)}
+        style={{flex:1, padding:"5px 0", borderRadius:4, border:`1px solid ${filter===v?c+"66":"#334155"}`,
+         background:filter===v?c+"15":"#1e293b", color:filter===v?c:"#64748b",
+         fontSize:10, fontWeight:600, cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s"}}>
+        {label}
+       </button>
+      );
+     })}
+    </div>
+   </div>
 
- {/* 건수 + 전체삭제 */}
- <div style={{padding:"6px 14px", borderBottom:"1px solid #1a1a2e", display:"flex", alignItems:"center", justifyContent:"space-between"}}>
- <span style={{fontSize:9, color:"#475569"}}>
- {filtered.length}건 {filter!=="all"||search?`/ 전체 ${history.length}건`:""}
- </span>
- {history.length > 0 && (
- <button onClick={()=>{if(confirm("전체 히스토리를 삭제할까요?")) onClear();}}
- style={{fontSize:9, color:"#475569", background:"none", border:"1px solid #1e2030",
- borderRadius:3, padding:"2px 8px", cursor:"pointer", fontFamily:"inherit"}}>
- 전체 삭제
- </button>
- )}
- </div>
+   {/* 건수 + 전체삭제 */}
+   <div style={{padding:"7px 14px", borderBottom:"1px solid #334155", display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+    <span style={{fontSize:10, color:"#64748b"}}>
+     {filtered.length}건 {filter!=="all"||search?`/ 전체 ${history.length}건`:""}
+    </span>
+    {history.length > 0 && (
+     <button onClick={()=>{if(confirm("전체 히스토리를 삭제할까요?")) onClear();}}
+      style={{fontSize:10, color:"#64748b", background:"none", border:"1px solid #334155",
+       borderRadius:4, padding:"2px 8px", cursor:"pointer", fontFamily:"inherit"}}>
+      전체 삭제
+     </button>
+    )}
+   </div>
 
- {/* 히스토리 목록 */}
- <div style={{flex:1, overflowY:"auto", padding:"8px 10px"}}>
- {filtered.length === 0 ? (
- <div style={{textAlign:"center", padding:"30px 0", fontSize:10, color:"#475569"}}>
- {history.length === 0 ? "분석 기록이 없습니다" : "검색 결과 없음"}
- </div>
- ) : filtered.map(h => {
- const rc = RISK_COLOR[h.result?.risk_level] || "#8899aa";
- const isSelected = selectedId === h.id;
- return (
- <div key={h.id}
- onClick={()=>{ setSelectedId(h.id); onSelect(h); }}
- style={{marginBottom:6, borderRadius:5, padding:"9px 10px", cursor:"pointer",
- border:`1px solid ${isSelected?rc+"55":"#1e2030"}`,
- background:isSelected?rc+"08":"#0f0f1a"}}>
+   {/* 히스토리 목록 */}
+   <div style={{flex:1, overflowY:"auto", padding:"8px 10px"}}>
+    {filtered.length === 0 ? (
+     <div style={{textAlign:"center", padding:"32px 0", fontSize:11, color:"#475569"}}>
+      {history.length === 0 ? "분석 기록이 없습니다" : "검색 결과 없음"}
+     </div>
+    ) : filtered.map(h => {
+     const rc = RISK_COLOR[h.result?.risk_level] || "#94a3b8";
+     const isSelected = selectedId === h.id;
+     return (
+      <div key={h.id} onClick={()=>{ setSelectedId(h.id); onSelect(h); }}
+       style={{marginBottom:6, borderRadius:6, padding:"10px 12px", cursor:"pointer",
+        border:`1px solid ${isSelected?rc+"55":"#334155"}`,
+        background:isSelected?rc+"0c":"#1e293b", transition:"all 0.1s"}}>
 
- {/* 상단: 위험도 + 날짜 + 삭제 */}
- <div style={{display:"flex", alignItems:"center", gap:5, marginBottom:4}}>
- <span style={{fontSize:9, fontWeight:700, color:rc,
- background:rc+"18", padding:"1px 6px", borderRadius:2}}>
- {h.result?.risk_level}
- </span>
- {h.memo && (
- <span style={{fontSize:8, color:"#a78bfa", background:"#a78bfa18",
- padding:"1px 5px", borderRadius:2}}>메모</span>
- )}
- <span style={{fontSize:8, color:"#475569", marginLeft:"auto"}}>{h.ts}</span>
- <button onClick={e=>{e.stopPropagation(); if(confirm("이 항목을 삭제할까요?")) onDelete(h.id);}}
- style={{background:"none", border:"none", color:"#475569", cursor:"pointer",
- fontSize:13, padding:"0 2px", fontFamily:"inherit", lineHeight:1}}>×</button>
- </div>
+       <div style={{display:"flex", alignItems:"center", gap:6, marginBottom:5}}>
+        <span style={{fontSize:10, fontWeight:700, color:rc, background:rc+"18", padding:"2px 7px", borderRadius:4}}>
+         {h.result?.risk_level}
+        </span>
+        {h.memo && <span style={{fontSize:9, color:"#a78bfa", background:"#a78bfa18", padding:"1px 6px", borderRadius:3}}>메모</span>}
+        <span style={{fontSize:10, color:"#475569", marginLeft:"auto"}}>{h.ts}</span>
+        <button onClick={e=>{e.stopPropagation(); if(confirm("이 항목을 삭제할까요?")) onDelete(h.id);}}
+         style={{background:"none", border:"none", color:"#475569", cursor:"pointer", fontSize:14, padding:"0 2px", lineHeight:1}}>×</button>
+       </div>
 
- {/* 이슈 내용 */}
- <div style={{fontSize:10, color:"#c8d0dc", lineHeight:1.4, marginBottom:4}}>
- {h.query.length > 60 ? h.query.slice(0,60)+"…" : h.query}
- </div>
+       <div style={{fontSize:11, color:"#cbd5e1", lineHeight:1.5, marginBottom:5}}>
+        {h.query.length > 60 ? h.query.slice(0,60)+"…" : h.query}
+       </div>
 
- {/* 메모 표시/편집 */}
- {editingId === h.id ? (
- <div onClick={e=>e.stopPropagation()} style={{marginTop:4}}>
- <textarea
- value={editMemo} onChange={e=>setEditMemo(e.target.value)}
- autoFocus
- style={{width:"100%", background:"#0a0a14", border:"1px solid #a78bfa44",
- borderRadius:3, padding:"4px 6px", fontSize:9, color:"#e2e8f0",
- fontFamily:"inherit", resize:"none", height:52, outline:"none", boxSizing:"border-box"}}
- />
- <div style={{display:"flex", gap:4, marginTop:3}}>
- <button onClick={e=>saveEdit(h.id,e)}
- style={{flex:1, fontSize:9, background:"#1a1040", border:"1px solid #a78bfa44",
- color:"#a78bfa", borderRadius:3, padding:"3px", cursor:"pointer", fontFamily:"inherit"}}>저장</button>
- <button onClick={e=>{e.stopPropagation();setEditingId(null);}}
- style={{flex:1, fontSize:9, background:"none", border:"1px solid #1e2030",
- color:"#6677aa", borderRadius:3, padding:"3px", cursor:"pointer", fontFamily:"inherit"}}>취소</button>
- </div>
- </div>
- ) : (
- <div style={{display:"flex", alignItems:"flex-start", gap:6}}>
- {h.memo && (
- <div style={{fontSize:9, color:"#a78bfa", flex:1, lineHeight:1.4}}>
- {h.memo.length>50?h.memo.slice(0,50)+"…":h.memo}
- </div>
- )}
- <button onClick={e=>startEdit(h,e)}
- style={{background:"none", border:"1px solid #1e2030", borderRadius:3,
- padding:"1px 6px", fontSize:8, color:"#475569", cursor:"pointer",
- fontFamily:"inherit", whiteSpace:"nowrap", marginLeft:"auto"}}>
- {h.memo ? "메모 수정" : "메모 추가"}
- </button>
- </div>
- )}
+       {editingId === h.id ? (
+        <div onClick={e=>e.stopPropagation()} style={{marginTop:5}}>
+         <textarea value={editMemo} onChange={e=>setEditMemo(e.target.value)} autoFocus
+          style={{width:"100%", background:"#0f172a", border:"1px solid #a78bfa44", borderRadius:4,
+           padding:"5px 8px", fontSize:10, color:"#e2e8f0", fontFamily:"inherit",
+           resize:"none", height:56, outline:"none", boxSizing:"border-box"}}/>
+         <div style={{display:"flex", gap:4, marginTop:4}}>
+          <button onClick={e=>saveEdit(h.id,e)}
+           style={{flex:1, fontSize:10, background:"rgba(167,139,250,0.1)", border:"1px solid #a78bfa44",
+            color:"#a78bfa", borderRadius:4, padding:"4px", cursor:"pointer", fontFamily:"inherit"}}>저장</button>
+          <button onClick={e=>{e.stopPropagation();setEditingId(null);}}
+           style={{flex:1, fontSize:10, background:"none", border:"1px solid #334155",
+            color:"#64748b", borderRadius:4, padding:"4px", cursor:"pointer", fontFamily:"inherit"}}>취소</button>
+         </div>
+        </div>
+       ) : (
+        <div style={{display:"flex", alignItems:"flex-start", gap:6}}>
+         {h.memo && <div style={{fontSize:10, color:"#a78bfa", flex:1, lineHeight:1.4}}>{h.memo.length>50?h.memo.slice(0,50)+"…":h.memo}</div>}
+         <button onClick={e=>startEdit(h,e)}
+          style={{background:"none", border:"1px solid #334155", borderRadius:4,
+           padding:"2px 8px", fontSize:9, color:"#64748b", cursor:"pointer", fontFamily:"inherit",
+           whiteSpace:"nowrap", marginLeft:"auto"}}>
+          {h.memo ? "메모 수정" : "메모 추가"}
+         </button>
+        </div>
+       )}
 
- {/* 조항 수 / 충돌 수 */}
- <div style={{display:"flex", gap:8, marginTop:4, fontSize:8, color:"#475569"}}>
- <span>조항 {h.result?.triggered_clauses?.length||0}개</span>
- <span>충돌 {h.result?.related_conflicts?.length||0}건</span>
- <span style={{marginLeft:"auto", color:h.mode==="extended"?"#a78bfa":"#60a5fa"}}>
- {h.mode==="extended"?"확장":"기본"}
- </span>
- </div>
- </div>
- );
- })}
- </div>
- </div>
+       <div style={{display:"flex", gap:8, marginTop:5, fontSize:10, color:"#475569"}}>
+        <span>조항 {h.result?.triggered_clauses?.length||0}개</span>
+        <span>충돌 {h.result?.related_conflicts?.length||0}건</span>
+        <span style={{marginLeft:"auto", color:h.mode==="extended"?"#a78bfa":"#60a5fa"}}>
+         {h.mode==="extended"?"확장":"기본"}
+        </span>
+       </div>
+      </div>
+     );
+    })}
+   </div>
+  </div>
 
- {/* -- 오른쪽: 선택된 분석 결과 -- */}
- <div style={{overflowY:"auto", padding:20}}>
- {selected ? (
- <div>
- <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:12}}>
- <span style={{fontSize:10, color:"#6677aa"}}>이슈</span>
- <span style={{fontSize:11, color:"#9aaabb", background:"#0f0f1a", border:"1px solid #1e2030",
- borderRadius:4, padding:"3px 9px", flex:1}}>{selected.query}</span>
- <span style={{fontSize:9, color:"#475569"}}>{selected.ts}</span>
- </div>
- {selected.memo && (
- <div style={{marginBottom:12, padding:"8px 12px", background:"#0f0a20",
- border:"1px solid #a78bfa33", borderRadius:5, fontSize:10, color:"#a78bfa", lineHeight:1.5}}>
- 📝 {selected.memo}
- </div>
- )}
- <ErrorBoundary><AnalysisResult result={selected.result} query={selected.query} mode={selected.mode} amendments={[]}/></ErrorBoundary>
- </div>
- ) : (
- <div style={{display:"flex", flexDirection:"column", alignItems:"center",
- justifyContent:"center", height:"60%", gap:8}}>
- <div style={{fontSize:30, opacity:0.2}}>📋</div>
- <div style={{fontSize:11, color:"#475569", textAlign:"center", lineHeight:1.8}}>
- 왼쪽에서 분석 기록을 선택하면<br/>결과와 리포트를 다시 볼 수 있습니다
- </div>
- </div>
- )}
- </div>
+  {/* ── 오른쪽: 선택된 분석 결과 ── */}
+  <div style={{overflowY:"auto", padding:24, background:"#020617"}}>
+   {selected ? (
+    <div>
+     <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:12}}>
+      <span style={{fontSize:10, color:"#64748b", textTransform:"uppercase", letterSpacing:"0.08em"}}>이슈</span>
+      <span style={{fontSize:12, color:"#94a3b8", background:"#0f172a", border:"1px solid #334155",
+       borderRadius:5, padding:"3px 10px", flex:1}}>{selected.query}</span>
+      <span style={{fontSize:10, color:"#475569"}}>{selected.ts}</span>
+     </div>
+     {selected.memo && (
+      <div style={{marginBottom:12, padding:"9px 14px", background:"rgba(167,139,250,0.08)",
+       border:"1px solid #a78bfa33", borderRadius:6, fontSize:12, color:"#a78bfa", lineHeight:1.6}}>
+       📝 {selected.memo}
+      </div>
+     )}
+     <ErrorBoundary><AnalysisResult result={selected.result} query={selected.query} mode={selected.mode} amendments={[]}/></ErrorBoundary>
+    </div>
+   ) : (
+    <div style={{display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:"60%", gap:12}}>
+     <div style={{fontSize:28, opacity:0.2}}>📋</div>
+     <div style={{fontSize:12, color:"#475569", textAlign:"center", lineHeight:1.9}}>
+      왼쪽에서 분석 기록을 선택하면<br/>결과와 리포트를 다시 볼 수 있습니다
+     </div>
+    </div>
+   )}
+  </div>
  </div>
  );
 }
