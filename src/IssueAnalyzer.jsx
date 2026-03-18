@@ -5071,20 +5071,8 @@ function HurdleTracker() {
 
  const fmt = (n) => n >= 1000000 ? `$${(n/1000000).toFixed(1)}M` : `$${n.toLocaleString()}`;
 
- const monthlyData = (() => {
- const sorted = [...records].sort((a,b) => a.date.localeCompare(b.date));
- const map = {};
- for (const r of sorted) {
- const ym = r.date.slice(0,7);
- map[ym] = (map[ym]||0) + r.amount;
- }
- let cum = 0;
- return Object.entries(map).map(([ym, amt]) => {
- cum += amt;
- return { label: ym, amount: amt, cumulative: cum };
- });
- })();
- const maxCum = Math.max(HURDLE_TARGET, ...monthlyData.map(d=>d.cumulative), 1);
+ const utilizationPct = totalLicense > 0 ? Math.min(100, (totalRevenue / totalLicense) * 100) : 0;
+ const utilizationColor = utilizationPct >= 70 ? "#10b981" : utilizationPct >= 40 ? "#f59e0b" : "#ef4444";
 
  const addOrUpdate = async () => {
  if (!form.date || !form.yearlyAmounts.length) return;
@@ -5201,40 +5189,61 @@ function HurdleTracker() {
  </div>
  </div>
 
- {/* 월별 추이 그래프 */}
- {monthlyData.length > 0 && (
+ {/* 라이선스 소진 현황 */}
  <div style={{marginBottom:16, background:"#020617", border:"1px solid #334155", borderRadius:8, padding:16}}>
- <div style={{fontSize:10, color:"#94a3b8", fontWeight:600, marginBottom:12}}>월별 누적 Revenue 추이</div>
- <svg width="100%" viewBox={`0 0 ${Math.max(monthlyData.length*72,300)} 140`} style={{overflow:"visible"}}>
- <line x1="0" y1={110*(1-HURDLE_TARGET/maxCum)} x2="100%" y2={110*(1-HURDLE_TARGET/maxCum)}
- stroke="#ff2d2055" strokeWidth="1" strokeDasharray="4,3"/>
- <text x="4" y={110*(1-HURDLE_TARGET/maxCum)-4} fontSize="8" fill="#ff2d2088">$55M</text>
- {monthlyData.map((d,i) => {
- const W = Math.max(monthlyData.length*72,300);
- const x = monthlyData.length===1 ? W/2 : (i/(monthlyData.length-1))*(W-40)+20;
- const y = 110*(1-d.cumulative/maxCum);
- const bH = 110*(d.amount/maxCum);
- return (
- <g key={d.label}>
- <rect x={x-12} y={110-bH} width={24} height={bH} fill="#60a5fa18" rx="2"/>
- <circle cx={x} cy={y} r="4" fill="#60a5fa"/>
- <text x={x} y={130} fontSize="7" fill="#475569" textAnchor="middle">{d.label}</text>
- <text x={x} y={y-8} fontSize="7" fill="#60a5fa" textAnchor="middle">{fmt(d.cumulative)}</text>
- </g>
- );
- })}
- {monthlyData.length > 1 && (
- <polyline
- points={monthlyData.map((d,i)=>{
- const W=Math.max(monthlyData.length*72,300);
- const x=monthlyData.length===1?W/2:(i/(monthlyData.length-1))*(W-40)+20;
- return `${x},${110*(1-d.cumulative/maxCum)}`;
- }).join(" ")}
- fill="none" stroke="#60a5fa" strokeWidth="1.5" strokeLinejoin="round"/>
- )}
- </svg>
+ <div style={{fontSize:10, color:"#94a3b8", fontWeight:600, marginBottom:12}}>라이선스 소진 현황</div>
+
+ {/* 3개 핵심 지표 */}
+ <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:14}}>
+  <div style={{background:"#1e293b", borderRadius:6, padding:"10px 12px"}}>
+   <div style={{fontSize:10, color:"#64748b", marginBottom:4}}>확보 라이선스</div>
+   <div style={{fontSize:15, fontWeight:700, color:"#a78bfa"}}>{fmt(totalLicense)}</div>
+   <div style={{fontSize:10, color:"#475569", marginTop:2}}>{Object.values(purchased).filter(Boolean).length}개년 선구매 완료</div>
+  </div>
+  <div style={{background:"#1e293b", borderRadius:6, padding:"10px 12px"}}>
+   <div style={{fontSize:10, color:"#64748b", marginBottom:4}}>재판매 실적</div>
+   <div style={{fontSize:15, fontWeight:700, color:"#60a5fa"}}>{fmt(totalRevenue)}</div>
+   <div style={{fontSize:10, color:"#475569", marginTop:2}}>소진율 {totalLicense>0?`${utilizationPct.toFixed(1)}%`:"–"}</div>
+  </div>
+  <div style={{background:"#1e293b", borderRadius:6, padding:"10px 12px", border:`1px solid ${unusedLicense>15000000?"#ef444422":"#334155"}`}}>
+   <div style={{fontSize:10, color:"#64748b", marginBottom:4}}>현금 노출</div>
+   <div style={{fontSize:15, fontWeight:700, color:unusedLicense>15000000?"#ef4444":"#94a3b8"}}>{fmt(unusedLicense)}</div>
+   <div style={{fontSize:10, color:"#475569", marginTop:2}}>선구매 후 미회수</div>
+  </div>
  </div>
- )}
+
+ {/* 전체 소진 바 */}
+ <div style={{height:22, borderRadius:4, overflow:"hidden", background:"#1e293b", display:"flex", marginBottom:6}}>
+  <div style={{width:`${Math.min(100,(totalRevenue/HURDLE_TARGET)*100)}%`, background:"linear-gradient(90deg,#60a5fa88,#60a5fa)", transition:"width 0.4s", minWidth: totalRevenue>0?2:0}}/>
+  <div style={{width:`${Math.min(100,(Math.max(0,totalLicense-totalRevenue)/HURDLE_TARGET)*100)}%`, background:"#ef444428", borderLeft: totalRevenue>0?"1px solid #ef444444":"none", transition:"width 0.4s"}}/>
+ </div>
+ <div style={{display:"flex", gap:14, fontSize:10, color:"#475569", marginBottom:14}}>
+  <span><span style={{color:"#60a5fa"}}>■</span> 재판매 {fmt(totalRevenue)}</span>
+  <span><span style={{color:"#ef4444", opacity:0.6}}>■</span> 현금노출 {fmt(unusedLicense)}</span>
+  <span style={{marginLeft:"auto"}}>/ {fmt(HURDLE_TARGET)}</span>
+ </div>
+
+ {/* Y1~Y5 선구매 행 */}
+ <div style={{display:"flex", flexDirection:"column", gap:5}}>
+  {PURCHASE_SCHEDULE.map(p=>{
+   const done = !!purchased[p.year];
+   const yr = startYear + p.year - 1;
+   const barPct = ((p.amount + p.bonus) / HURDLE_TARGET) * 100;
+   return (
+   <div key={p.year} style={{display:"flex", alignItems:"center", gap:8}}>
+    <span style={{width:24, fontSize:10, color:done?"#a78bfa":"#334155", fontWeight:600, flexShrink:0}}>{p.label}</span>
+    <div style={{flex:1, height:10, background:"#0f172a", borderRadius:3, overflow:"hidden"}}>
+     <div style={{height:"100%", width:`${barPct}%`, background:done?"#a78bfa44":"#33415533", borderRadius:3, transition:"width 0.4s"}}/>
+    </div>
+    <span style={{width:90, fontSize:10, color:done?"#a78bfa":"#475569", textAlign:"right", flexShrink:0}}>
+     {fmt(p.amount)}{p.bonus>0?` +${fmt(p.bonus)}`:""}
+    </span>
+    <span style={{width:44, fontSize:10, color:done?"#34d399":"#334155", textAlign:"right", flexShrink:0}}>{done?"완료":`${yr}년`}</span>
+   </div>
+   );
+  })}
+ </div>
+ </div>
 
  {/* 입력 폼 */}
  <div style={{marginBottom:12, display:"flex", justifyContent:"flex-end"}}>
