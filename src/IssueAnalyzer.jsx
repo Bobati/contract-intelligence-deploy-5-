@@ -118,6 +118,8 @@ export default function IssueAnalyzer() {
  const [loading, setLoading] = useState(false);
  const [loadingMsg, setLoadingMsg] = useState("ANALYZING...");
  const [rawDocCount, setRawDocCount] = useState(0);
+ const abortRef = useRef(null);
+ const cancelAnalysis = () => { if (abortRef.current) { abortRef.current.abort(); abortRef.current = null; } };
  const [error, setError] = useState(null);
  const [activeHistory, setActiveHistory] = useState(null);
  const [amendments, setAmendments] = useState([]);
@@ -219,6 +221,8 @@ export default function IssueAnalyzer() {
  const query = input.trim();
  // 자동 모드: 이슈 내용 기반으로 기본/확장 결정
  const effectiveMode = mode === "auto" ? detectMode(query) : mode;
+ const abortCtrl = new AbortController();
+ abortRef.current = abortCtrl;
  setInput(""); setLoading(true); setError(null); setActiveHistory(null);
  try {
  // 업로드된 원문 문서 로드
@@ -252,9 +256,10 @@ export default function IssueAnalyzer() {
 // ── Stage 1: 병렬 — KT 변호인(TOS 제외) + Palantir 변호인 + TOS 분석 ──
  setLoadingMsg("ANALYZING...");
  const ktContent = userContent.length > 1 ? userContent : finalQuery;
+ const signal = abortCtrl.signal;
  const [ktRes, palantirRes, tosRes] = await Promise.all([
   fetch("/api/chat", {
-   method: "POST", headers: {"Content-Type": "application/json"},
+   method: "POST", headers: {"Content-Type": "application/json"}, signal,
    body: JSON.stringify({
     max_tokens: 2000,
     system: buildKTLawyerPrompt(effectiveMode, amendments, rawItems.length > 0, issueType, ["TOS"]),
@@ -262,14 +267,14 @@ export default function IssueAnalyzer() {
    })
   }),
   fetch("/api/chat", {
-   method: "POST", headers: {"Content-Type": "application/json"},
+   method: "POST", headers: {"Content-Type": "application/json"}, signal,
    body: JSON.stringify({
     max_tokens: 1200,
     messages: [{role: "user", content: buildPalantirLawyerPrompt(finalQuery, issueType)}]
    })
   }),
   fetch("/api/chat", {
-   method: "POST", headers: {"Content-Type": "application/json"},
+   method: "POST", headers: {"Content-Type": "application/json"}, signal,
    body: JSON.stringify({
     max_tokens: 1000,
     messages: [{role: "user", content: buildTOSPrompt(finalQuery, issueType)}]
@@ -307,7 +312,7 @@ export default function IssueAnalyzer() {
  // ── Stage 2: 판사 심의 ────────────────────────────────────────────
  setLoadingMsg("DELIBERATING...");
  const judgeRes = await fetch("/api/chat", {
-  method: "POST", headers: {"Content-Type": "application/json"},
+  method: "POST", headers: {"Content-Type": "application/json"}, signal,
   body: JSON.stringify({
    max_tokens: 4096,
    messages: [{role: "user", content: buildJudgePrompt(finalQuery, ktStrategy, palantirCase, effectiveMode, issueType, findSimilarCases(history, issueType, null))}]
@@ -371,8 +376,9 @@ export default function IssueAnalyzer() {
  const nh=[entry,...history];
  setHistory(nh); setActiveHistory(entry.id); await saveHistory(nh);
  } catch(e) {
- setError("오류: "+e.message);
- } finally { setLoading(false); }
+ if (e.name === "AbortError") { /* 사용자 중단 — 에러 표시 안 함 */ }
+ else setError("오류: "+e.message);
+ } finally { setLoading(false); abortRef.current = null; }
  };
 
  const current = history.find(h=>h.id===activeHistory);
@@ -606,6 +612,13 @@ export default function IssueAnalyzer() {
        <div style={{display:"flex",justifyContent:"center",gap:6,marginTop:14}}>
         {[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:loadingMsg==="DELIBERATING..."?"#a78bfa":"#3b82f6",animation:"bounce 0.8s ease-in-out infinite",animationDelay:`${i*0.2}s`}}/>)}
        </div>
+       <button onClick={cancelAnalysis}
+        style={{marginTop:20,padding:"6px 20px",background:"transparent",border:"1px solid #475569",borderRadius:5,
+         fontSize:11,color:"#64748b",fontFamily:"inherit",cursor:"pointer",letterSpacing:".04em"}}
+        onMouseEnter={e=>{e.currentTarget.style.borderColor="#ef4444";e.currentTarget.style.color="#f87171";}}
+        onMouseLeave={e=>{e.currentTarget.style.borderColor="#475569";e.currentTarget.style.color="#64748b";}}>
+        ✕ 분석 중단
+       </button>
       </div>
      )}
      {error && (
