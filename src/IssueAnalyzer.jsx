@@ -112,7 +112,7 @@ export default function IssueAnalyzer() {
  const [sessionReady, setSessionReady] = useState(!!SESSION_ID);
  const [appTab, setAppTab] = useState("docs"); // "docs" | "analyze"
  const [globalViewingClause, setGlobalViewingClause] = useState(null);
- const [mode, setMode] = useState("basic");
+ const [mode, setMode] = useState("auto");
  const [input, setInput] = useState("");
  const [history, setHistory] = useState([]);
  const [loading, setLoading] = useState(false);
@@ -217,6 +217,8 @@ export default function IssueAnalyzer() {
  const analyze = async () => {
  if (!input.trim()||loading) return;
  const query = input.trim();
+ // 자동 모드: 이슈 내용 기반으로 기본/확장 결정
+ const effectiveMode = mode === "auto" ? detectMode(query) : mode;
  setInput(""); setLoading(true); setError(null); setActiveHistory(null);
  try {
  // 업로드된 원문 문서 로드
@@ -255,7 +257,7 @@ export default function IssueAnalyzer() {
    method: "POST", headers: {"Content-Type": "application/json"},
    body: JSON.stringify({
     max_tokens: 2000,
-    system: buildKTLawyerPrompt(mode, amendments, rawItems.length > 0, issueType),
+    system: buildKTLawyerPrompt(effectiveMode, amendments, rawItems.length > 0, issueType),
     messages: [{role: "user", content: ktContent}]
    })
   }),
@@ -294,7 +296,7 @@ export default function IssueAnalyzer() {
   method: "POST", headers: {"Content-Type": "application/json"},
   body: JSON.stringify({
    max_tokens: 4096,
-   messages: [{role: "user", content: buildJudgePrompt(finalQuery, ktStrategy, palantirCase, mode, issueType, findSimilarCases(history, issueType, null))}]
+   messages: [{role: "user", content: buildJudgePrompt(finalQuery, ktStrategy, palantirCase, effectiveMode, issueType, findSimilarCases(history, issueType, null))}]
   })
  });
  if (!judgeRes.ok) { const t = await judgeRes.text(); throw new Error("API " + judgeRes.status + ": " + t); }
@@ -350,7 +352,7 @@ export default function IssueAnalyzer() {
  };
 
 
- const entry={id:Date.now(),query,result,mode,ts:new Date().toLocaleString("ko-KR")};
+ const entry={id:Date.now(),query,result,mode:effectiveMode,_autoMode:mode==="auto",ts:new Date().toLocaleString("ko-KR")};
  const nh=[entry,...history];
  setHistory(nh); setActiveHistory(entry.id); await saveHistory(nh);
  } catch(e) {
@@ -455,10 +457,12 @@ export default function IssueAnalyzer() {
      </span>
     )}
     <div style={{display:"flex",background:"#1e293b",borderRadius:5,padding:2,border:"1px solid #334155"}}>
-     {[["basic","기본"],["extended","확장"]].map(([m,label])=>(
-      <button key={m} onClick={()=>setMode(m)} style={{padding:"3px 10px",borderRadius:3,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,fontFamily:"inherit",transition:"all 0.15s",
-       background:mode===m?(m==="extended"?"#2d1060":"#0f2d60"):"transparent",
-       color:mode===m?(m==="extended"?"#c084fc":"#60a5fa"):"#64748b"}}>{label}</button>
+     {[["auto","자동"],["basic","기본"],["extended","확장"]].map(([m,label])=>(
+      <button key={m} onClick={()=>setMode(m)}
+       title={m==="auto"?"이슈 내용을 분석해 자동으로 기본/확장 결정":m==="extended"?"내규·법령 포함 확장 분석":"계약 문서 기반 기본 분석"}
+       style={{padding:"3px 10px",borderRadius:3,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,fontFamily:"inherit",transition:"all 0.15s",
+       background:mode===m?(m==="extended"?"#2d1060":m==="auto"?"#0d2d20":"#0f2d60"):"transparent",
+       color:mode===m?(m==="extended"?"#c084fc":m==="auto"?"#34d399":"#60a5fa"):"#64748b"}}>{label}</button>
      ))}
     </div>
    </>}
@@ -600,6 +604,7 @@ export default function IssueAnalyzer() {
         <span style={{fontSize:10,color:"#475569",letterSpacing:"0.08em",textTransform:"uppercase"}}>이슈</span>
         <span style={{fontSize:12,color:"#94a3b8",background:"#0f172a",border:"1px solid #334155",borderRadius:5,padding:"3px 10px",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{current.query}</span>
         <span style={{fontSize:11,fontWeight:600,color:current.mode==="extended"?"#c084fc":"#60a5fa",background:current.mode==="extended"?"#1e106044":"#0f2d6044",border:`1px solid ${current.mode==="extended"?"#c084fc33":"#3b82f633"}`,borderRadius:4,padding:"3px 10px"}}>{current.mode==="extended"?"확장":"기본"}</span>
+        {current._autoMode && <span style={{fontSize:9,color:"#34d399",marginLeft:2}}>자동감지</span>}
        </div>
        <ErrorBoundary><AnalysisResult result={current.result} query={current.query} mode={current.mode} amendments={amendments} onOpenClause={setGlobalViewingClause}/></ErrorBoundary>
       </div>
@@ -1352,6 +1357,21 @@ const ISSUE_TYPES = {
 - 계약서 필수 기재사항 충족 여부(REG-계약-36조)?`
  },
 };
+
+// 이슈 내용 기반 기본/확장 모드 자동 감지
+function detectMode(text) {
+ const t = (text||"").toLowerCase();
+ // 확장 모드 트리거: 내규·법령·공정거래·하도급·정보보호 관련 키워드
+ const extendedKeywords = [
+  "하도급", "재위탁", "재하도급",
+  "개인정보", "정보보호", "정보통신망", "gdpr", "보안규정",
+  "공정거래", "불공정", "공정위", "갑질", "담합",
+  "하도급법", "민법", "소송", "법원", "분쟁조정",
+  "내규", "사규", "계약규정", "회계규정", "협력사선정",
+  "협력사 선정", "벤더 선정", "구매규정",
+ ];
+ return extendedKeywords.some(kw => t.includes(kw)) ? "extended" : "basic";
+}
 
 // 이슈 텍스트로 유형 추론 (키워드 기반 1차, API 2차)
 function classifyIssueLocally(text) {
