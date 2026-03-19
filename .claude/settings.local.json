@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(vercel ls:*)",
+      "Bash(vercel --prod)",
+      "Bash(vercel env:*)",
+      "Bash(curl:*)",
+      "Bash(vercel logs:*)",
+      "WebFetch(domain:www.radix-ui.com)",
+      "Bash(npx vercel:*)",
+      "Bash(node -e \":*)",
+      "Bash(node tabReplace.js)",
+      "Bash(node --require ./tabReplace.cjs)",
+      "Bash(node --require \"\" tabReplace.cjs)",
+      "Bash(node -e \"require\\(''''./tabReplace.cjs''''\\)\")",
+      "Bash(cp tabReplace.js tabReplace.cjs)",
+      "Bash(node tabReplace.cjs)",
+      "Bash(cd:*)"
+    ]
+  }
+}

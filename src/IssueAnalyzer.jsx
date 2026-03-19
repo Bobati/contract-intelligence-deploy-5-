@@ -1223,6 +1223,10 @@ function buildClauseAliasMap() {
  add("Appendix 6", "SAA-APP6");
  add("Appendix 7", "SAA-APP7");
  add("Resale Terms Appendix 7", "SAA-APP7");
+ add("Target Market definition", "SAA-RESA-1");
+ add("Target Market means", "SAA-RESA-1");
+ add("Target Market revised", "SAA-RESA-1");
+ add("definition of Target Market", "SAA-RESA-1");
 
  return map;
 }
@@ -3399,10 +3403,11 @@ const [expandedPendingRows, setExpandedPendingRows] = useState({});
 
  if (newDocType === 'AMD' && (textContent || '').trim().length > 0) {
   const kbRefs = CONTRACT_KB.clauses
-  .slice(0, 500)
-  .map(c => `${c.id} | ${c.doc} | ${c.topic}`)
+  .filter(c => c.doc === 'SAA')
+  .slice(0, 60)
+  .map(c => `${c.id} | ${c.topic}`)
   .join('\n');
-  const chunks = splitAmendmentChunks((textContent || '').slice(0, 50000), 2000, 260);
+  const chunks = splitAmendmentChunks((textContent || '').slice(0, 50000), 2500, 300);
   const chunkRows = [];
 
   for (let i = 0; i < chunks.length; i++) {
@@ -3410,12 +3415,14 @@ const [expandedPendingRows, setExpandedPendingRows] = useState({});
   setUploadStatus({ name: file.name, status: 'extracting', msg: `Amendment 청크 추출 중... (${i + 1}/${chunks.length})` });
   const chunkPrompt = `다음 Amendment 텍스트 청크를 분석해 JSON 객체 하나만 출력하시오.
 
-반드시 아래 순서를 지킬 것:
-1) 청크 내에 등장하는 조항 식별자(Article, Section, §, 제N조, Schedule, Appendix)를 먼저 찾는다.
-2) 식별자별로 변경 내용을 정리한다.
-3) 아래 기존 조항 목록과 대조해 기존 조항이면 changeType="수정", 목록에 없는 신규면 changeType="신규"로 표시한다.
+조항 ID 매핑 규칙 (반드시 준수):
+- "Sub-clause X.Y.Z" / "Section X.Y.Z" → "SAA-X.Y.Z" (예: Sub-clause 3.2.5.2 → SAA-3.2.5.2)
+- "Appendix 6" / "Schedule A Appendix 6" → "SAA-APP6"
+- "Appendix 7" / "Schedule A Appendix 7" → "SAA-APP7"
+- "Target Market" 정의 변경 → "SAA-RESA-1"
+- 그 외 신규 조항 → "SAA-NEW-{번호}"
 
-기존 조항 목록:
+기존 SAA 조항 목록 (수정이면 이 ID 사용):
 ${kbRefs}
 
 출력 JSON 스키마:
@@ -3425,21 +3432,23 @@ ${kbRefs}
  "summary": "청크 요약",
  "patches": [
   {
-  "clauseId": "기존 조항 ID 또는 신규 식별자",
+  "clauseId": "위 규칙에 따른 조항 ID",
   "changeType": "수정|신규",
-  "doc": "SAA|TOS|OF3|OF4|AMD",
-  "newTopic": "변경 주제",
-  "newCore": "변경 핵심",
-  "newFullText": "변경 조항 원문",
+  "doc": "SAA",
+  "newTopic": "변경 주제 (한국어)",
+  "newCore": "변경 핵심 내용 요약 (한국어 1-3문장, 반드시 작성)",
+  "newFullText": "변경된 조항 원문 전체",
   "newTranslation": "변경 조항 한국어 전문 번역",
-  "newContext": "변경 맥락"
+  "newContext": "변경 맥락 및 KT 영향"
   }
  ]
 }
 
 중요:
-- JSON 이외 텍스트 금지
-- patches 누락 금지(없으면 빈 배열)
+- 순수 JSON만 출력, 설명 금지
+- newCore는 반드시 내용 요약을 한국어로 작성 (null/빈 문자열 금지)
+- Appendix 전체 교체인 경우 newFullText에 목록 전체 포함
+- 이 청크에 변경 조항이 없으면 patches를 빈 배열로 반환
 
 === Amendment 청크 (${i + 1}/${chunks.length}) ===
 ${chunk}`;
@@ -3454,15 +3463,19 @@ ${chunk}`;
   if (!parsed || !Array.isArray(parsed.patches)) continue;
 
   for (const p of parsed.patches) {
-   const resolvedId = resolveClauseId(p.clauseId || '', p.doc);
+   if (!p.clauseId) continue;
+   const resolvedId = resolveClauseId(p.clauseId || '', p.doc || 'SAA');
    const prev = clauses.find(c => c.id === resolvedId) || CONTRACT_KB.clauses.find(c => c.id === resolvedId);
    const normalizedChange = prev ? '수정' : '신규';
+   const coreVal = p.newCore || p.newText || prev?.core || (p.newFullText || '').slice(0, 200) || p.newTopic || '';
+   const textVal = p.newFullText || p.newText || prev?.text || p.newCore || '';
+   if (!coreVal && !textVal) continue;
    chunkRows.push({
-    id: resolvedId || p.clauseId || `AMD-${Date.now()}-${i + 1}`,
-    doc: p.doc || prev?.doc || 'AMD',
+    id: resolvedId || p.clauseId,
+    doc: p.doc || prev?.doc || 'SAA',
     topic: p.newTopic || p.topic || prev?.topic || '변경 조항',
-    core: p.newCore || p.newText || prev?.core || '',
-    text: p.newFullText || p.newText || prev?.text || p.newCore || '',
+    core: coreVal,
+    text: textVal,
     translation: p.newTranslation || prev?.translation || '',
     context: p.newContext || prev?.context || '',
     section: prev?.section || resolvedId || p.clauseId,
@@ -3505,14 +3518,15 @@ ${chunk}`;
   amendmentMeta = parseAmendmentPayload(raw);
   if (amendmentMeta && Array.isArray(amendmentMeta.patches) && amendmentMeta.patches.length > 0) {
    extracted = amendmentMeta.patches.map((p, idx) => {
-    const clauseId = resolveClauseId(p.clauseId || `AMD-${Date.now()}-${idx+1}`, p.doc);
+    const clauseId = resolveClauseId(p.clauseId || `AMD-${Date.now()}-${idx+1}`, p.doc || 'SAA');
     const prev = clauses.find(c => c.id === clauseId) || CONTRACT_KB.clauses.find(c => c.id === clauseId);
     const normalizedChange = prev ? '수정' : '신규';
+    const coreVal = p.newCore || p.newText || prev?.core || (p.newFullText || '').slice(0, 200) || p.newTopic || '';
     return {
      id: clauseId,
-     doc: p.doc || prev?.doc || 'AMD',
+     doc: p.doc || prev?.doc || 'SAA',
      topic: p.newTopic || p.topic || prev?.topic || '변경 조항',
-     core: p.newCore || p.newText || prev?.core || '',
+     core: coreVal,
      text: p.newFullText || p.newText || prev?.text || p.newCore || '',
      kt_risk: prev?.kt_risk || '',
      section: prev?.section || clauseId,
@@ -3521,7 +3535,7 @@ ${chunk}`;
      context: p.newContext || prev?.context || '',
     _changeType: normalizedChange,
     };
-   }).filter(e => e.id && (e.core || e.text));
+   }).filter(e => e.id && e.id !== 'undefined' && (e.core || e.text));
   }
  }
 
@@ -3558,24 +3572,24 @@ ${chunk}`;
  if (amdParsed && Array.isArray(amdParsed.patches) && amdParsed.patches.length > 0) {
   amendmentMeta = amdParsed;
   extracted = amdParsed.patches.map((p, idx) => {
-  const clauseId = resolveClauseId(p.clauseId || `AMD-${Date.now()}-${idx+1}`, p.doc);
+  const clauseId = resolveClauseId(p.clauseId || `AMD-${Date.now()}-${idx+1}`, p.doc || 'SAA');
    const prev = clauses.find(c => c.id === clauseId) || CONTRACT_KB.clauses.find(c => c.id === clauseId);
-   const newText = p.newText || p.newCore || prev?.text || prev?.core || '';
     const normalizedChange = prev ? '수정' : '신규';
+   const coreVal = p.newCore || p.newText || prev?.core || (p.newFullText || '').slice(0, 200) || p.newTopic || p.topic || '';
    return {
     id: clauseId,
-    doc: prev?.doc || 'AMD',
-    topic: p.topic || prev?.topic || '변경 조항',
-    core: p.newCore || p.newText || prev?.core || '',
-    text: newText,
+    doc: p.doc || prev?.doc || 'SAA',
+    topic: p.newTopic || p.topic || prev?.topic || '변경 조항',
+    core: coreVal,
+    text: p.newFullText || p.newText || prev?.text || p.newCore || '',
     kt_risk: prev?.kt_risk || '',
     section: prev?.section || clauseId,
-    title: prev?.title || p.topic || 'Amendment',
+    title: prev?.title || p.newTopic || p.topic || 'Amendment',
     translation: p.newTranslation || prev?.translation || '',
-    context: prev?.context || '',
+    context: p.newContext || prev?.context || '',
     _changeType: normalizedChange,
    };
-  }).filter(e => e.id && (e.core || e.text));
+  }).filter(e => e.id && e.id !== 'undefined' && (e.core || e.text));
  }
 
  // 마지막 안전장치: JSON이 계속 실패하면 라인 포맷으로 강제 추출
@@ -3610,18 +3624,24 @@ clauseId||changeType||doc||topic||newCore
    .map(s => s.trim())
    .filter(s => s && s.includes('||') && !s.startsWith('```'));
 
+  const ERROR_KEYWORDS = /파싱\s*실패|분석\s*불가|추출\s*불가|오류|error|failed|cannot/i;
   const parsedLines = lines.map((line, idx) => {
    const parts = line.split('||').map(s => (s || '').trim());
-   if (parts.length < 5) return null;
+   if (parts.length < 4) return null;
    const [clauseIdRaw, changeTypeRaw, docRaw, topicRaw, coreRaw] = parts;
-  const clauseId = resolveClauseId(clauseIdRaw || `AMD-${Date.now()}-${idx+1}`, docRaw);
+   // 오류 메시지가 포함된 라인은 무시
+   if (ERROR_KEYWORDS.test(topicRaw) || ERROR_KEYWORDS.test(coreRaw || '')) return null;
+   if (!clauseIdRaw || clauseIdRaw.length < 2) return null;
+   const clauseId = resolveClauseId(clauseIdRaw, docRaw || 'SAA');
    const prev = clauses.find(c => c.id === clauseId) || CONTRACT_KB.clauses.find(c => c.id === clauseId);
    const changeType = /수정|추가|삭제|대체/.test(changeTypeRaw) ? changeTypeRaw.match(/수정|추가|삭제|대체/)[0] : (prev ? '수정' : '추가');
+   const coreVal = coreRaw || prev?.core || '';
+   if (!coreVal && !prev?.text) return null;
    return {
     id: clauseId,
-    doc: docRaw || prev?.doc || 'AMD',
+    doc: docRaw || prev?.doc || 'SAA',
     topic: topicRaw || prev?.topic || '변경 조항',
-    core: coreRaw || prev?.core || '',
+    core: coreVal,
     text: prev?.text || coreRaw || '',
     kt_risk: prev?.kt_risk || '',
     section: prev?.section || clauseId,
@@ -4429,7 +4449,14 @@ const AMENDMENT_PARSE_PROMPT = `다음 계약 문서(Amendment, 신규 계약서
  ]
 }
 
-기존 조항 ID 목록(참고): SAA-1.3.1, SAA-1.3.2, SAA-1.6.8, SAA-2.10, SAA-2.11, SAA-6.2, SAA-6.3, SAA-8.2, SAA-9.0, OF3-FEES, OF4-FEES, OF4-CLOUD, TOS-7, TOS-8.2, TOS-8.4, TOS-12, TOS-13
+조항 ID 매핑 규칙 (반드시 준수):
+- "Sub-clause X.Y.Z" / "Section X.Y.Z" → "SAA-X.Y.Z" (예: Sub-clause 3.2.5.2 → SAA-3.2.5.2)
+- "Appendix 6" / "Schedule A Appendix 6" → "SAA-APP6"
+- "Appendix 7" / "Schedule A Appendix 7" → "SAA-APP7"
+- "Target Market" 정의 변경 → "SAA-RESA-1"
+- 기타 신규 조항 → "SAA-NEW-{번호}"
+
+기존 조항 ID 목록(참고): SAA-1.3.1, SAA-1.3.2, SAA-1.6.8, SAA-2.10, SAA-2.11, SAA-3.2.4, SAA-3.2.5, SAA-3.2.5.2, SAA-6.2, SAA-6.3, SAA-8.2, SAA-9.0, SAA-APP6, SAA-APP7, SAA-RESA-1, OF3-FEES, OF4-FEES, OF4-CLOUD, TOS-7, TOS-8.2, TOS-8.4, TOS-12, TOS-13
 
 번역 품질 규칙:
 - newTranslation은 반드시 전문완역으로 작성. 핵심만 추려 쓴 요약문 금지.
