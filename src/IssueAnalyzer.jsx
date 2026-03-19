@@ -249,15 +249,15 @@ export default function IssueAnalyzer() {
   } catch(e) { /* URL fetch 실패 시 원본 쿼리 사용 */ }
  }
  userContent[userContent.length - 1] = { type: "text", text: finalQuery };
-// ── Stage 1: 병렬 — KT 변호인 + Palantir 변호인 ─────────────────
+// ── Stage 1: 병렬 — KT 변호인(TOS 제외) + Palantir 변호인 + TOS 분석 ──
  setLoadingMsg("ANALYZING...");
  const ktContent = userContent.length > 1 ? userContent : finalQuery;
- const [ktRes, palantirRes] = await Promise.all([
+ const [ktRes, palantirRes, tosRes] = await Promise.all([
   fetch("/api/chat", {
    method: "POST", headers: {"Content-Type": "application/json"},
    body: JSON.stringify({
     max_tokens: 2000,
-    system: buildKTLawyerPrompt(effectiveMode, amendments, rawItems.length > 0, issueType),
+    system: buildKTLawyerPrompt(effectiveMode, amendments, rawItems.length > 0, issueType, ["TOS"]),
     messages: [{role: "user", content: ktContent}]
    })
   }),
@@ -266,6 +266,13 @@ export default function IssueAnalyzer() {
    body: JSON.stringify({
     max_tokens: 1200,
     messages: [{role: "user", content: buildPalantirLawyerPrompt(finalQuery, issueType)}]
+   })
+  }),
+  fetch("/api/chat", {
+   method: "POST", headers: {"Content-Type": "application/json"},
+   body: JSON.stringify({
+    max_tokens: 1000,
+    messages: [{role: "user", content: buildTOSPrompt(finalQuery, issueType)}]
    })
   })
  ]);
@@ -288,6 +295,13 @@ export default function IssueAnalyzer() {
   const palantirData = await palantirRes.json();
   const palantirText = (palantirData.content || []).map(c => c.text || "").join("").trim();
   palantirCase = { ...palantirCase, ...safeParseJSON(palantirText) };
+ }
+
+ let tosAnalysis = { has_risk: false, summary: "", triggered_clauses: [], kt_tos_defense: "" };
+ if (tosRes.ok) {
+  const tosData = await tosRes.json();
+  const tosText = (tosData.content || []).map(c => c.text || "").join("").trim();
+  tosAnalysis = { ...tosAnalysis, ...safeParseJSON(tosText) };
  }
 
  // ── Stage 2: 판사 심의 ────────────────────────────────────────────
@@ -349,6 +363,7 @@ export default function IssueAnalyzer() {
   _issueType: issueType,
   _ktStrategy: ktStrategy,
   _palantirCase: palantirCase,
+  _tosAnalysis: tosAnalysis,
  };
 
 
@@ -1704,14 +1719,17 @@ ${similarCases}
 }
 
 // --- KT 변호인 프롬프트 -------------------------------------------------------
-function buildKTLawyerPrompt(mode, amendments=[], hasRawDocs=false, issueType=null) {
+function buildKTLawyerPrompt(mode, amendments=[], hasRawDocs=false, issueType=null, excludeDocs=[]) {
  const contractDocs = ["SAA","TOS","OF3","OF4"];
- const filteredClauses = mode==="extended"
+ const filteredClauses = (mode==="extended"
   ? CONTRACT_KB.clauses
-  : CONTRACT_KB.clauses.filter(c => contractDocs.includes(c.doc));
+  : CONTRACT_KB.clauses.filter(c => contractDocs.includes(c.doc))
+ ).filter(c => !excludeDocs.includes(c.doc));
  const filteredConflicts = mode==="extended"
   ? CONTRACT_KB.conflicts
   : CONTRACT_KB.conflicts.filter(c => !c.id.startsWith('EC-'));
+ // excludeDocs 안내 (TOS 제외 시 명시)
+ const excludeNote = excludeDocs.length > 0 ? `\n※ 이 분석은 ${excludeDocs.join("/")} 제외. 해당 문서는 별도 TOS 분석에서 다룸.` : "";
  const typeInfo = issueType && ISSUE_TYPES[issueType] ? ISSUE_TYPES[issueType] : null;
  const priorityClauses = typeInfo ? filteredClauses.filter(c => typeInfo.clauses.includes(c.id)) : filteredClauses;
  const otherClauses = typeInfo ? filteredClauses.filter(c => !typeInfo.clauses.includes(c.id)) : [];
@@ -1730,7 +1748,7 @@ function buildKTLawyerPrompt(mode, amendments=[], hasRawDocs=false, issueType=nu
   ? "\n【Amendment 반영】\n" + amendments.map(a => `${a.amendedBy}: ${(a.patches||[]).map(p=>p.clauseId).join(", ")} 수정`).join("\n")
   : "";
  return `당신은 KT 법무팀 전속 변호인입니다. 아래 이슈에서 KT에게 최대한 유리한 법적 전략과 논거를 구성하시오.
-목표: KT의 권리를 최대화하고, 법적 리스크를 최소화하며, 협상에서 유리한 포지션을 확보할 것.
+목표: KT의 권리를 최대화하고, 법적 리스크를 최소화하며, 협상에서 유리한 포지션을 확보할 것.${excludeNote}
 ${hasRawDocs ? "【원문 첨부】계약서 원문이 첨부되어 있습니다. 조항 해석 시 원문을 우선 참조하십시오." : ""}
 문서 우선순위: Order Form > SAA > TOS
 Hurdle: USD 55,000,000 / OF3: USD 9,000,000 / OF4: USD 27,000,000 (편의해지 불가)
@@ -1873,6 +1891,41 @@ ${similarCasesText}
  ]
 }
 【immediate_actions 규칙】 반드시 3개 이상 출력. "조치 없음" 또는 빈 배열 [] 출력 금지.`;
+}
+
+// --- TOS 전용 분석 프롬프트 ---------------------------------------------------
+function buildTOSPrompt(query, issueType=null) {
+ const tosClauses = CONTRACT_KB.clauses.filter(c => c.doc === "TOS");
+ const clauseLines = tosClauses.map(c => {
+  const base = c.id + " / " + c.topic + " / " + c.core;
+  const detail = c.text ? " | " + c.text : "";
+  const risk = c.kt_risk ? " [KT리스크: " + c.kt_risk + "]" : "";
+  return base + detail + risk;
+ }).join("\n");
+ return `당신은 KT-Palantir 계약 전문가입니다.
+SAA+OF3+OF4 기반 핵심 분석은 이미 완료됐습니다. TOS(Terms of Service)가 이 이슈에 추가적으로 미치는 영향만 분석하시오.
+
+【이슈】
+${query}
+
+【TOS 조항 전체】
+${clauseLines}
+
+【분석 지침】
+- SAA/OF3/OF4와 중복되는 내용은 제외하고 TOS에서만 발생하는 추가 리스크에 집중
+- TOS가 이슈에 영향을 미치지 않으면 has_risk: false로 명시
+- KT에 유리한 TOS 조항 해석도 포함할 것
+- triggered_clauses는 실제 이슈와 관련 있는 TOS 조항만 포함 (관련 없으면 빈 배열)
+
+출력 형식 — JSON만. 다른 텍스트 절대 금지.
+{
+ "has_risk": true,
+ "summary": "TOS 추가 리스크 한 줄 요약 (없으면 '이슈에 TOS 추가 리스크 없음')",
+ "triggered_clauses": [
+  {"clause_id": "TOS-X.X", "topic": "조항 주제", "additional_risk": "추가 리스크 설명", "kt_position": "KT 방어/유리한 해석"}
+ ],
+ "kt_tos_defense": "TOS 조항 전반에 대한 KT 핵심 방어 포인트 (없으면 빈문자열)"
+}`;
 }
 
 // --- REPORT -------------------------------------------------------------------
@@ -4772,9 +4825,11 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
  const rv = (result.risk_level||"NONE").toUpperCase();
  const R = RISK[rv] || RISK.NONE;
 
+ const tos = result._tosAnalysis || {};
  const sections = [
   {id:"kt_strategy",   label:"KT 전략"},
   {id:"palantir_case", label:"예상 반론"},
+  {id:"tos",           label: tos.has_risk ? "TOS ⚠" : "TOS"},
   {id:"clauses",       label:`조항 (${result.triggered_clauses?.length||0})`},
   {id:"actions",       label:`조치 (${result.immediate_actions?.length||0})`},
  ];
@@ -5050,6 +5105,76 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
       <Label>법적 효과 분석</Label>
       <div style={{fontSize:13,color:S.t2,lineHeight:1.9,fontFamily:S.font}}>{formatArgument(result.legal_analysis,openClause)}</div>
      </Card>
+    </div>
+   )}
+
+   {/* ── TOS 추가 분석 ── */}
+   {activeSection==="tos" && (
+    <div>
+     {/* 요약 배너 */}
+     <div style={{background: tos.has_risk ? "rgba(239,68,68,0.08)" : "rgba(34,197,94,0.08)",
+      border:`1px solid ${tos.has_risk ? "rgba(239,68,68,0.3)" : "rgba(34,197,94,0.3)"}`,
+      borderLeft:`4px solid ${tos.has_risk ? "#ef4444" : "#22c55e"}`,
+      borderRadius:8, padding:"12px 16px", marginBottom:12}}>
+      <div style={{fontSize:10,fontWeight:700,color:tos.has_risk?"#ef4444":"#22c55e",letterSpacing:".08em",marginBottom:4}}>
+       {tos.has_risk ? "⚠ TOS 추가 리스크 있음" : "✓ TOS 추가 리스크 없음"}
+      </div>
+      <div style={{fontSize:13,color:S.t1,lineHeight:1.75,fontFamily:S.font,fontWeight:500}}>
+       {tos.summary || "TOS 분석 결과 없음"}
+      </div>
+     </div>
+
+     {/* KT TOS 방어 */}
+     {tos.kt_tos_defense && (
+      <Card style={{borderLeft:"3px solid #3b82f6",marginBottom:12}}>
+       <Label>KT TOS 방어 포인트</Label>
+       <div style={{fontSize:13,color:S.t1,lineHeight:1.85,fontFamily:S.font}}>
+        {formatArgument(tos.kt_tos_defense, openClause)}
+       </div>
+      </Card>
+     )}
+
+     {/* 트리거된 TOS 조항 */}
+     {(tos.triggered_clauses||[]).length > 0 ? (
+      <Card style={{marginBottom:12}}>
+       <Label>이슈 관련 TOS 조항 ({tos.triggered_clauses.length}건)</Label>
+       <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {tos.triggered_clauses.map((c,i)=>(
+         <div key={i} style={{background:S.cardIn,borderRadius:7,border:`1px solid ${S.borderSub}`,overflow:"hidden"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderBottom:`1px solid ${S.borderSub}`}}>
+           <span style={{fontSize:11,fontWeight:700,color:"#f59e0b",fontFamily:S.font,cursor:"pointer"}}
+            onClick={()=>openClause(c.clause_id)}>
+            {c.clause_id}
+           </span>
+           <span style={{fontSize:12,fontWeight:600,color:S.t1,flex:1,fontFamily:S.font}}>{c.topic}</span>
+          </div>
+          <div style={{padding:"10px 12px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+           <div>
+            <div style={{fontSize:9,fontWeight:700,color:"#ef4444",marginBottom:4,letterSpacing:".06em"}}>추가 리스크</div>
+            <div style={{fontSize:12,color:S.t2,lineHeight:1.65,fontFamily:S.font}}>{c.additional_risk}</div>
+           </div>
+           <div>
+            <div style={{fontSize:9,fontWeight:700,color:"#60a5fa",marginBottom:4,letterSpacing:".06em"}}>KT 입장</div>
+            <div style={{fontSize:12,color:S.t2,lineHeight:1.65,fontFamily:S.font}}>{c.kt_position}</div>
+           </div>
+          </div>
+         </div>
+        ))}
+       </div>
+      </Card>
+     ) : tos.has_risk === false && (
+      <Card>
+       <div style={{fontSize:13,color:S.t3,lineHeight:1.7,fontFamily:S.font,textAlign:"center",padding:"12px 0"}}>
+        이 이슈에 대해 TOS에서 추가로 발생하는 리스크가 없습니다.
+       </div>
+      </Card>
+     )}
+
+     <div style={{marginTop:14,padding:"10px 14px",background:S.cardIn,borderRadius:6,border:`1px solid ${S.borderSub}`}}>
+      <div style={{fontSize:10,color:S.t4,fontFamily:S.font,lineHeight:1.65}}>
+       ℹ TOS는 SAA·OF3·OF4 분석 완료 후 추가로 검토하는 문서입니다. 위 내용은 핵심 분석에서 다루지 않은 TOS 고유 조항의 영향만 표시합니다.
+      </div>
+     </div>
     </div>
    )}
 
