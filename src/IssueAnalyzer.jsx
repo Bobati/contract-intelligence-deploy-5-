@@ -4907,7 +4907,7 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
     background:R.bg, borderBottom:`1px solid ${R.border}`,
     borderLeft:`4px solid ${R.color}`}}>
     <div style={{fontSize:9,fontWeight:800,color:R.color,letterSpacing:".12em",marginBottom:6,textTransform:"uppercase",fontFamily:S.font}}>
-     ⚖ 판사 결론
+     ⚖ 종합 의견
     </div>
     <div style={{fontSize:14,fontWeight:600,color:R.color,lineHeight:1.75,fontFamily:S.font}}>
      {linkifyClauses(result.bottom_line, openClause)}
