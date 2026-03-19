@@ -16,7 +16,13 @@
       "Bash(node -e \"require\\(''''./tabReplace.cjs''''\\)\")",
       "Bash(cp tabReplace.js tabReplace.cjs)",
       "Bash(node tabReplace.cjs)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(vercel alias:*)",
+      "Bash(pip show:*)",
+      "Bash(npm list:*)",
+      "Bash(npm install:*)",
+      "Bash(node make_ppt.cjs)",
+      "Bash(ls:*)"
     ]
   }
 }

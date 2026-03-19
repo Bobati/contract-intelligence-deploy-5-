@@ -1771,14 +1771,26 @@ ${hasRawDocs ? "【원문 첨부】계약서 원문이 첨부되어 있습니다
 Hurdle: USD 55,000,000 / OF3: USD 9,000,000 / OF4: USD 27,000,000 (편의해지 불가)
 ${readHurdleSnapshot()||""}${amendNote}
 
+【계약 문서 구조 (필수 이해 — 분석 전 반드시 확인)】
+■ SAA: KT-Palantir 파트너십 계약 본체이자 리셀러 계약(OF2, 라이선스 선구매)의 근거 계약.
+  KT가 Palantir 라이선스를 Target Market 고객에게 재판매할 독점권 및 Hurdle($55M) 달성 의무의 기준.
+■ OF2(리셀 라이선스, SAA 내 포함): KT→고객 재판매용 라이선스 선구매 계약. Hurdle 달성의 기준이 되는 물량.
+■ OF3($9M, 용역계약): Palantir 엔지니어를 KT가 직접 활용하는 엔지니어링 서비스 계약.
+  Hurdle($55M) 산입 대상 아님. 서비스 제공·사용 이슈는 이 계약 기준으로 판단.
+■ OF4($27M, 내부 라이선스): KT가 Palantir 라이선스를 KT 내부 업무에 사용하기 위한 계약. 편의해지 불가.
+  ★ 핵심: OF4 구매 물량은 SAA 내 리셀 라이선스(OF2)에서 차감 가능.
+  즉 KT가 OF4로 내부 사용한 만큼 재판매 가능한 라이선스 물량이 감소함. 이슈 분석 시 이 차감 관계를 반드시 고려할 것.
+
 【계약 구조 파악 (필수 확인)】
-① 고객 범위:
- - Target Market (Appendix 6 — 보험·금융): 신한라이프, DB손해보험, DB생명, 현대해상화재보험, 서울보증보험, 한화생명, 한화손해보험, ABL생명, 캐롯손해보험, 메리츠화재, KB손해보험, KDB생명, KB생명, 삼성생명, 삼성화재, 하나생명, 하나손해보험, 미래에셋생명, 농협손해보험, 농협생명, 교보생명 → SAA-1.3.1/1.3.2 독점권 유효
- - Other Market (Appendix 7): 현대자동차, 기아, 포스코, 한화시스템, 현대로템, 현대글로비스, CJ제일제당, KOBC, 서울아산병원, 산업통상자원부 → Co-Sell 조건 준수, Hurdle 미산입
+① 이슈 관련 문서 식별: 이슈가 SAA(리셀·파트너십), OF3(엔지니어 용역), OF4(내부 라이선스) 중 어디에 해당하는지 먼저 판단
+② 고객 범위:
+ - Target Market (Appendix 6 — 보험·금융): 신한라이프, DB손해보험, DB생명, 현대해상화재보험, 서울보증보험, 한화생명, 한화손해보험, ABL생명, 캐롯손해보험, 메리츠화재, KB손해보험, KDB생명, KB생명, 삼성생명, 삼성화재, 하나생명, 하나손해보험, 미래에셋생명, 농협손해보험, 농협생명, 교보생명 (삼성 그룹사 제외) → SAA-1.3.1/1.3.2 독점권 유효
+ - Other Market (Appendix 7, AMD No.1 반영): 포스코인터내셔널, 포스코퓨처엠, 포스코, 대한항공, 한화시스템, GS리테일, GS칼텍스, 현대글로비스, LS일렉트릭, 셀트리온, 포스코이앤씨, 포스코DX, 포스코플로우 → Co-Sell 조건 준수, Hurdle 미산입
  - 범위 외: Palantir 자유 영업 가능. SAA 위반 아님.
-② 행위 주체: KT 귀책인지 Palantir 귀책인지 확인
-③ 조건 충족: Hurdle 달성 여부, 20일 치유기간 선행 여부, EBT Target Market 적용 여부
-④ 문서 우선순위: Order Form > SAA > TOS
+③ 행위 주체: KT 귀책인지 Palantir 귀책인지 확인
+④ 조건 충족: Hurdle 달성 여부, 20일 치유기간 선행 여부, EBT Target Market 적용 여부
+⑤ OF4 차감 여부: OF4 내부 사용 물량이 리셀 가용 물량에 영향을 미치는지 확인
+⑥ 문서 우선순위: Order Form > SAA > TOS
 
 ${typeInfo ? `【${typeInfo.label} 이슈 — 핵심 조항】\n${priorityLines}` : `주요 조항:\n${priorityLines}`}
 ${otherLines ? `\n참고 조항:\n${otherLines}` : ""}
@@ -1809,14 +1821,17 @@ ${otherConflictLines ? `기타 충돌: ${otherConflictLines}` : ""}
 function buildPalantirLawyerPrompt(query, issueType=null) {
  return `당신은 Palantir Korea LLC 법무팀 변호인입니다. 아래 KT-Palantir 계약 이슈에서 Palantir 측에 가장 유리한 법적 논거와 대응 전략을 구성하시오.
 
-【계약 기본 정보】
-- SAA: KT ↔ Palantir Korea LLC. TOS가 SAA에 통합됨.
-- OF3($9M) + OF4($27M): KT 내부 라이선스. OF4는 편의해지 불가.
-- Hurdle $55M: KT가 고객에게 $55M 이상 판매해야 수익배분 조건 발동. 미달 시 Palantir 수익배분 의무 없음.
+【계약 문서 구조 (필수 이해)】
+- SAA: KT-Palantir 파트너십 계약 본체. 리셀러 계약(OF2, 라이선스 선구매)이 SAA 내에 포함됨. TOS가 SAA에 통합됨.
+- OF2(리셀 라이선스, SAA 내): KT→고객 재판매용 라이선스. Hurdle($55M) 달성의 기준 물량.
+- OF3($9M, 용역): Palantir 엔지니어를 KT가 사용하는 용역계약. Hurdle 산입 대상 아님.
+- OF4($27M, 내부 라이선스): KT 내부 업무용 Palantir 라이선스. 편의해지 불가.
+  ★ OF4 구매 물량은 SAA 리셀 라이선스(OF2)에서 차감 가능 — KT 내부 사용분만큼 재판매 가능 물량 감소.
+- Hurdle $55M: KT가 고객에게 $55M 이상 판매(OF2 기준)해야 수익배분 조건 발동. 미달 시 Palantir 수익배분 의무 없음.
 - TOS §8.4: Palantir은 미결제 30일 초과·AUP 위반·법령 위반 시 서비스 즉시 정지 가능 (치유기간 불필요).
 - SAA §6.2: Material breach 시 20일 서면통보 후 해지 가능. 단 TOS §8.4는 즉시 발동.
 - SAA §2.11: Hurdle 달성 시 수익배분 — KT 10% / Palantir 90% (고정). 달성 전 배분 의무 없음.
-- SAA §1.3.1/1.3.2: KT 독점권은 Target Market(보험·금융)에만 적용. Other Market 및 범위 외 고객은 Palantir 자유 영업.
+- SAA §1.3.1/1.3.2: KT 독점권은 Target Market(보험·금융, AMD No.1 반영)에만 적용. Other Market(Appendix 7, AMD No.1: 포스코계열·대한항공·GS계열 등 13개사) 및 범위 외 고객은 Palantir 자유 영업.
 - 문서 우선순위: Order Form > SAA > TOS
 
 【이슈】
@@ -1846,6 +1861,14 @@ function buildJudgePrompt(query, ktStrategy, palantirCase, mode, issueType=null,
   : "";
  return `당신은 KT-Palantir Korea LLC 계약 분쟁 최종 심의 전문가입니다.
 양측 변호인의 논거를 모두 검토하고 최종 확정 분석을 도출하시오.
+
+【계약 문서 구조 (판단 전 반드시 확인)】
+- SAA: KT-Palantir 파트너십 및 리셀러 계약(OF2) 본체. KT의 Target Market 독점 재판매권 근거.
+- OF2(SAA 내 포함): KT→고객 재판매용 라이선스 선구매. Hurdle($55M) 산정 기준.
+- OF3($9M): Palantir 엔지니어 용역계약. KT가 Palantir 인력을 사용. Hurdle 산입 대상 아님.
+- OF4($27M): KT 내부 업무용 라이선스. 편의해지 불가. OF4 사용 물량은 OF2 리셀 가용 물량에서 차감 가능.
+  → 이슈가 어느 계약에 해당하는지 먼저 식별한 후 판단할 것. OF3과 OF4는 목적과 구조가 근본적으로 다름.
+- 문서 우선순위: Order Form(OF3·OF4) > SAA > TOS
 
 【이슈】
 ${query}
