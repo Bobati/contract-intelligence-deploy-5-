@@ -4896,10 +4896,24 @@ function AnalysisResult({ result, query, mode, amendments=[], onOpenClause }) {
    </div>
 
    {/* 상황 요약 */}
-   <div style={{fontSize:13,color:S.t3,lineHeight:1.75,fontFamily:S.font}}>
+   <div style={{fontSize:12,color:S.t3,lineHeight:1.7,fontFamily:S.font}}>
     {linkifyClauses(result.situation_summary||"", openClause)}
    </div>
   </div>
+
+  {/* ── 판사 결론 ── */}
+  {result.bottom_line && (
+   <div style={{margin:"0 0 0 0",padding:"14px 20px",
+    background:R.bg, borderBottom:`1px solid ${R.border}`,
+    borderLeft:`4px solid ${R.color}`}}>
+    <div style={{fontSize:9,fontWeight:800,color:R.color,letterSpacing:".12em",marginBottom:6,textTransform:"uppercase",fontFamily:S.font}}>
+     ⚖ 판사 결론
+    </div>
+    <div style={{fontSize:14,fontWeight:600,color:R.color,lineHeight:1.75,fontFamily:S.font}}>
+     {linkifyClauses(result.bottom_line, openClause)}
+    </div>
+   </div>
+  )}
 
   {/* ── 탭 바 ── */}
   <div style={{display:"flex",borderBottom:`1px solid ${S.border}`,background:S.bg,padding:"0 12px"}}>
