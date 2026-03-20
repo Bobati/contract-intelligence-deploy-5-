@@ -430,7 +430,7 @@ export default function IssueAnalyzer() {
   <div style={{width:1,height:24,background:"#334155",flexShrink:0}}/>
   {/* 탭 */}
   <div style={{display:"flex",gap:1}}>
-   {[["analyze","이슈 분석"],["hurdle","Hurdle"],["timeline","변경 이력"],["history","히스토리"],["docs","문서 관리"]].map(([tab,label])=>(
+   {[["analyze","이슈 분석"],["review","조항 검토"],["hurdle","Hurdle"],["timeline","변경 이력"],["history","히스토리"],["docs","문서 관리"]].map(([tab,label])=>(
     <button key={tab} onClick={()=>setAppTab(tab)}
      style={{padding:"6px 14px",borderRadius:4,border:"none",cursor:"pointer",
       fontSize:12,fontWeight:appTab===tab?600:400,fontFamily:"inherit",
@@ -504,6 +504,7 @@ export default function IssueAnalyzer() {
    />
   )}
 
+  {appTab==="review" && <ClauseReviewTab clauses={clauses} conflicts={conflicts} amendments={amendments}/>}
   {appTab==="timeline" && <ClauseTimelineTab onOpenClause={setGlobalViewingClause}/>}
   {appTab==="hurdle" && <HurdleTracker/>}
 
@@ -6950,5 +6951,253 @@ ${ktGoals || '(\uba85\uc2dc \uc5c6\uc74c \u2014 KT \uc804\ubc18\uc801 \uc774\uc7
  </div>
  </div>
  </div>
+ );
+}
+
+// ══════════════════════════════════════════════════════
+// 조항 검토 탭
+// ══════════════════════════════════════════════════════
+function ClauseReviewTab({ clauses, conflicts, amendments }) {
+ const [query, setQuery] = useState('');
+ const [messages, setMessages] = useState([]); // [{role, content, clauses:[]}]
+ const [input, setInput] = useState('');
+ const [loading, setLoading] = useState(false);
+ const [reportMode, setReportMode] = useState(false);
+ const bottomRef = React.useRef(null);
+
+ React.useEffect(() => {
+  bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+ }, [messages, loading]);
+
+ const buildSystemPrompt = () => {
+  const clauseLines = (clauses || []).slice(0, 120).map(c =>
+   `[${c.id}] (${c.doc}) ${c.topic||''}: ${(c.core||c.text||'').slice(0,300)}`
+  ).join('\n');
+  const conflictLines = (conflicts || []).map(cf =>
+   `[${cf.id}] ${cf.topic}: ${cf.summary}`
+  ).join('\n');
+  const amdLines = (amendments || []).map(a =>
+   `[Amendment: ${a.fileName}] ${a.changes?.map(c=>`${c.clauseId} ${c.changeType}`).join(', ')||''}`
+  ).join('\n');
+
+  return `당신은 계약서 조항 검토 전문가입니다. 아래 계약서 내용을 바탕으로 질문에 답하세요.
+
+【역할】
+- 계약서에 실제로 기재된 내용을 중립적·사실적으로 정리
+- 양사의 법적 유불리 분석이나 전략적 조언은 하지 않음
+- 관련 조항 번호(예: SAA §6.2)와 출처 문서를 반드시 명시
+- 충돌하는 조항이 있으면 "A문서에는 ~, B문서에는 ~라고 규정되어 있습니다"로 병기
+- "~라고 규정되어 있습니다", "~로 정의됩니다", "~에 따르면" 등 사실 서술체 사용
+
+【계약서 조항】
+${clauseLines}
+
+【식별된 충돌】
+${conflictLines}
+
+${amdLines ? `【Amendment 변경사항】\n${amdLines}` : ''}
+
+【응답 형식】
+1. 관련 조항 요약 (조항별로 구분하여 서술)
+2. 문서 간 동일/충돌 내용이 있으면 별도 항목으로 정리
+3. 마지막에 "관련 조항:" 으로 참조된 조항 ID 목록 표시`;
+ };
+
+ const searchClauses = (q) => {
+  const kw = q.toLowerCase().split(/\s+/).filter(Boolean);
+  return (clauses || []).filter(c => {
+   const text = `${c.id} ${c.topic} ${c.core||c.text||''} ${c.doc}`.toLowerCase();
+   return kw.some(k => text.includes(k));
+  }).slice(0, 8);
+ };
+
+ const askAI = async (userMsg, history) => {
+  const msgs = [
+   ...history.map(m => ({ role: m.role, content: m.content })),
+   { role: 'user', content: userMsg }
+  ];
+  const res = await fetch('/api/chat', {
+   method: 'POST',
+   headers: { 'Content-Type': 'application/json' },
+   body: JSON.stringify({ system: buildSystemPrompt(), messages: msgs, max_tokens: 2000 })
+  });
+  if (!res.ok) throw new Error('API 오류');
+  const data = await res.json();
+  return data.content || data.text || data.choices?.[0]?.message?.content || '';
+ };
+
+ const handleSearch = async () => {
+  if (!query.trim() || loading) return;
+  setLoading(true);
+  const relatedClauses = searchClauses(query);
+  try {
+   const answer = await askAI(query, []);
+   setMessages([{ role: 'user', content: query }, { role: 'assistant', content: answer, clauses: relatedClauses }]);
+  } catch(e) {
+   setMessages([{ role: 'user', content: query }, { role: 'assistant', content: '오류가 발생했습니다: ' + e.message, clauses: [] }]);
+  }
+  setLoading(false);
+ };
+
+ const handleFollowUp = async () => {
+  if (!input.trim() || loading) return;
+  const userMsg = input.trim();
+  setInput('');
+  setLoading(true);
+  const relatedClauses = searchClauses(userMsg);
+  const history = messages.map(m => ({ role: m.role, content: m.content }));
+  const newMsgs = [...messages, { role: 'user', content: userMsg }];
+  setMessages(newMsgs);
+  try {
+   const answer = await askAI(userMsg, history);
+   setMessages([...newMsgs, { role: 'assistant', content: answer, clauses: relatedClauses }]);
+  } catch(e) {
+   setMessages([...newMsgs, { role: 'assistant', content: '오류: ' + e.message, clauses: [] }]);
+  }
+  setLoading(false);
+ };
+
+ const generateReport = () => {
+  const title = messages[0]?.content || '조항 검토 리포트';
+  const date = new Date().toLocaleDateString('ko-KR');
+  const body = messages.filter(m => m.role === 'assistant').map((m, i) => {
+   const q = messages.filter(m2=>m2.role==='user')[i]?.content || '';
+   return `<h3 style="color:#1e40af;margin-top:24px">Q${i+1}. ${q}</h3><div style="white-space:pre-wrap;line-height:1.8">${m.content.replace(/\n/g,'<br/>')}</div>`;
+  }).join('');
+  const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>${title}</title>
+  <style>body{font-family:'Malgun Gothic',sans-serif;max-width:900px;margin:40px auto;padding:0 24px;color:#1a202c;font-size:14px}
+  h1{font-size:22px;color:#1e293b;border-bottom:2px solid #3b82f6;padding-bottom:8px}
+  h3{font-size:15px}
+  .meta{color:#64748b;font-size:12px;margin-bottom:32px}
+  </style></head><body>
+  <h1>📋 조항 검토 리포트</h1>
+  <div class="meta">검토 주제: ${title} &nbsp;|&nbsp; 생성일: ${date}</div>
+  ${body}
+  </body></html>`;
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+ };
+
+ const S = {
+  wrap: { height:'100%', display:'flex', flexDirection:'column', overflow:'hidden', background:'#07070f' },
+  header: { padding:'12px 20px', borderBottom:'1px solid #1a1a2e', background:'#0a0a14', flexShrink:0 },
+  searchRow: { display:'flex', gap:8, padding:'12px 16px', borderBottom:'1px solid #1a1a2e', flexShrink:0 },
+  chatArea: { flex:1, overflowY:'auto', padding:'16px 20px', display:'flex', flexDirection:'column', gap:16 },
+  userBubble: { alignSelf:'flex-end', maxWidth:'70%', background:'#1e3a5f', padding:'10px 14px', borderRadius:'12px 12px 2px 12px', fontSize:12, color:'#e2e8f0', lineHeight:1.6 },
+  aiBubble: { alignSelf:'stretch', background:'#0f172a', border:'1px solid #1e293b', borderRadius:'2px 12px 12px 12px', padding:'14px 16px', fontSize:12, color:'#cbd5e1', lineHeight:1.8 },
+  clauseCard: { background:'#0b1220', border:'1px solid #1e3a5f', borderRadius:6, padding:'8px 10px', marginTop:10 },
+  inputRow: { display:'flex', gap:8, padding:'10px 16px', borderTop:'1px solid #1a1a2e', flexShrink:0, background:'#0a0a14' },
+ };
+
+ return (
+  <div style={S.wrap}>
+   {/* 헤더 */}
+   <div style={S.header}>
+    <div style={{display:'flex', alignItems:'center', gap:10}}>
+     <div>
+      <div style={{fontSize:13, fontWeight:700, color:'#94a3b8'}}>📋 조항 검토</div>
+      <div style={{fontSize:10, color:'#475569', marginTop:2}}>계약서에 어떻게 규정되어 있는지 중립적으로 정리합니다</div>
+     </div>
+     {messages.length > 0 && (
+      <div style={{marginLeft:'auto', display:'flex', gap:8}}>
+       <button onClick={generateReport}
+        style={{fontSize:11, background:'#1e3a5f', color:'#93c5fd', border:'1px solid #2563eb33', borderRadius:6, padding:'6px 12px', cursor:'pointer'}}>
+        📄 리포트 보기
+       </button>
+       <button onClick={()=>{ setMessages([]); setQuery(''); }}
+        style={{fontSize:11, background:'#1e293b', color:'#64748b', border:'1px solid #334155', borderRadius:6, padding:'6px 12px', cursor:'pointer'}}>
+        초기화
+       </button>
+      </div>
+     )}
+    </div>
+   </div>
+
+   {/* 초기 검색창 */}
+   {messages.length === 0 ? (
+    <div style={{flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, padding:32}}>
+     <div style={{fontSize:22, opacity:0.2}}>📋</div>
+     <div style={{fontSize:13, color:'#64748b', textAlign:'center', lineHeight:1.8}}>
+      검토할 주제를 입력하세요<br/>
+      <span style={{fontSize:11}}>계약서·내규에 어떻게 규정되어 있는지 정리해 드립니다</span>
+     </div>
+     <div style={{width:'100%', maxWidth:580, display:'flex', gap:8}}>
+      <input
+       value={query}
+       onChange={e=>setQuery(e.target.value)}
+       onKeyDown={e=>e.key==='Enter'&&handleSearch()}
+       placeholder="예: 해지 통보 절차, Liability Cap, 연체이자율, CISO 승인 요건..."
+       autoFocus
+       style={{flex:1, background:'#0f172a', border:'1px solid #334155', borderRadius:8,
+        padding:'12px 14px', fontSize:12, color:'#e2e8f0', fontFamily:'inherit', outline:'none'}}
+      />
+      <button onClick={handleSearch} disabled={loading||!query.trim()}
+       style={{padding:'12px 20px', background:'#2563eb', color:'#fff', border:'none',
+        borderRadius:8, fontSize:12, cursor:'pointer', fontWeight:600, opacity:loading||!query.trim()?0.5:1}}>
+       {loading ? '검색 중...' : '검토'}
+      </button>
+     </div>
+     <div style={{display:'flex', flexWrap:'wrap', gap:8, maxWidth:580, justifyContent:'center'}}>
+      {['해지 통보 절차','Liability Cap','연체이자율','CISO 보안성 승인','Hurdle 달성 기준','준거법 및 중재지'].map(ex=>(
+       <button key={ex} onClick={()=>{ setQuery(ex); }}
+        style={{fontSize:11, background:'#1e293b', color:'#64748b', border:'1px solid #334155',
+         borderRadius:20, padding:'5px 12px', cursor:'pointer'}}>
+        {ex}
+       </button>
+      ))}
+     </div>
+    </div>
+   ) : (
+    <>
+     {/* 대화 영역 */}
+     <div style={S.chatArea}>
+      {messages.map((m, i) => (
+       <div key={i} style={m.role==='user' ? {display:'flex', justifyContent:'flex-end'} : {}}>
+        {m.role==='user' ? (
+         <div style={S.userBubble}>{m.content}</div>
+        ) : (
+         <div style={S.aiBubble}>
+          <div style={{whiteSpace:'pre-wrap', lineHeight:1.8}}>{m.content}</div>
+          {m.clauses?.length > 0 && (
+           <div style={{marginTop:12, display:'flex', flexWrap:'wrap', gap:6}}>
+            <div style={{width:'100%', fontSize:10, color:'#475569', marginBottom:4}}>관련 조항</div>
+            {m.clauses.map((c,ci)=>(
+             <div key={ci} style={S.clauseCard}>
+              <div style={{fontSize:10, fontWeight:700, color:'#60a5fa', marginBottom:3}}>{c.id} · {c.doc}</div>
+              <div style={{fontSize:11, color:'#94a3b8', lineHeight:1.6}}>{(c.core||c.text||'').slice(0,200)}{(c.core||c.text||'').length>200?'…':''}</div>
+             </div>
+            ))}
+           </div>
+          )}
+         </div>
+        )}
+       </div>
+      ))}
+      {loading && (
+       <div style={{...S.aiBubble, color:'#475569', fontStyle:'italic'}}>조항 검토 중...</div>
+      )}
+      <div ref={bottomRef}/>
+     </div>
+
+     {/* 추가 질문 입력 */}
+     <div style={S.inputRow}>
+      <input
+       value={input}
+       onChange={e=>setInput(e.target.value)}
+       onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&handleFollowUp()}
+       placeholder="추가 질문을 입력하세요..."
+       style={{flex:1, background:'#0f172a', border:'1px solid #334155', borderRadius:6,
+        padding:'9px 12px', fontSize:12, color:'#e2e8f0', fontFamily:'inherit', outline:'none'}}
+      />
+      <button onClick={handleFollowUp} disabled={loading||!input.trim()}
+       style={{padding:'9px 16px', background:'#2563eb', color:'#fff', border:'none',
+        borderRadius:6, fontSize:12, cursor:'pointer', opacity:loading||!input.trim()?0.5:1}}>
+       전송
+      </button>
+     </div>
+    </>
+   )}
+  </div>
  );
 }
