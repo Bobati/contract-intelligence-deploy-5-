@@ -504,7 +504,7 @@ export default function IssueAnalyzer() {
    />
   )}
 
-  {appTab==="review" && <ClauseReviewTab clauses={CONTRACT_KB.clauses} conflicts={CONTRACT_KB.conflicts} amendments={amendments}/>}
+  {appTab==="review" && <ErrorBoundary><ClauseReviewTab clauses={CONTRACT_KB.clauses} conflicts={CONTRACT_KB.conflicts} amendments={amendments}/></ErrorBoundary>}
   {appTab==="timeline" && <ClauseTimelineTab onOpenClause={setGlobalViewingClause}/>}
   {appTab==="hurdle" && <HurdleTracker/>}
 
@@ -6969,7 +6969,7 @@ function ClauseReviewTab({ clauses, conflicts, amendments }) {
   bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
  }, [messages, loading]);
 
- const buildSystemPrompt = () => {
+ const buildReviewPrompt = () => {
   const clauseLines = (clauses || []).slice(0, 120).map(c =>
    `[${c.id}] (${c.doc}) ${c.topic||''}: ${(c.core||c.text||'').slice(0,300)}`
   ).join('\n');
@@ -7019,9 +7019,9 @@ ${amdLines ? `【Amendment 변경사항】\n${amdLines}` : ''}
   const res = await fetch('/api/chat', {
    method: 'POST',
    headers: { 'Content-Type': 'application/json' },
-   body: JSON.stringify({ system: buildSystemPrompt(), messages: msgs, max_tokens: 2000 })
+   body: JSON.stringify({ system: buildReviewPrompt(), messages: msgs, max_tokens: 2000 })
   });
-  if (!res.ok) throw new Error('API 오류');
+  if (!res.ok) throw new Error('API 오류 ' + res.status);
   const data = await res.json();
   return data.content || data.text || data.choices?.[0]?.message?.content || '';
  };
