@@ -7006,6 +7006,11 @@ function ClauseReviewTab({ clauses, conflicts, amendments }) {
 - "~라고 규정되어 있습니다", "~로 정의됩니다", "~에 따르면" 등 사실 서술체 사용
 - 관련 내용이 없는 문서는 언급하지 않음
 
+【검토 우선순위】
+1순위(필수): SAA, OF3, OF4 — 이 세 문서를 가장 먼저 철저히 검토
+2순위: TOS — SAA/OF와 다른 내용이 있을 경우 병기
+3순위(필요시): 하도급지침, 정보보호지침, 회계규정 등 내규 — 계약서와 내규 간 충돌이 의심될 때만
+
 【계약서 조항 (문서별)】
 ${clauseLines}
 
@@ -7015,26 +7020,31 @@ ${conflictLines}
 ${amdLines ? `【Amendment 변경사항】\n${amdLines}` : ''}
 
 【응답 형식】
-1. 관련 조항 요약 (문서별로 구분하여 서술, 관련 없는 문서는 생략)
+1. 관련 조항 요약 (SAA → OF3 → OF4 → TOS 순서로, 관련 없는 문서는 생략)
 2. 문서 간 동일/충돌 내용이 있으면 별도 항목으로 정리
-3. 마지막에 "참조 조항:" 으로 참조된 조항 ID 목록 표시`;
+3. 마지막에 "참조 조항: [ID1, ID2, ...]" 형식으로 조항 ID 목록 표시 (이 줄은 반드시 포함)`;
  };
 
- const searchClauses = (q) => {
-  const kw = q.toLowerCase().split(/\s+/).filter(Boolean);
-  return (clauses || []).filter(c => {
-   const text = `${c.id} ${c.topic} ${c.core||c.text||''} ${c.doc}`.toLowerCase();
-   return kw.some(k => text.includes(k));
-  }).slice(0, 8);
+ // AI 응답 텍스트에서 실제 언급된 조항 ID 추출
+ const extractClauseIds = (text) => {
+  const ids = new Set();
+  const patterns = [/\b(SAA-[\w.]+)/g, /\b(TOS-[\w.]+)/g, /\b(OF3-[\w.]+)/g, /\b(OF4-[\w.]+)/g,
+   /\b(REG-[\w가-힣]+)/g, /\b(LAW-[\w가-힣]+)/g, /\b(EC-\d+)/g, /\b(XC-\d+)/g, /\b(IC-\d+)/g];
+  for (const pat of patterns) {
+   for (const m of (text.matchAll ? text.matchAll(pat) : [])) ids.add(m[1]);
+  }
+  return (clauses || []).filter(c => ids.has(c.id));
  };
 
- const askAI = async (userMsg, history) => {
+ const abortRef = useRef(null);
+
+ const askAI = async (userMsg, history, signal) => {
   const msgs = [
    ...history.map(m => ({ role: m.role, content: m.content })),
    { role: 'user', content: userMsg }
   ];
   const res = await fetch('/api/chat', {
-   method: 'POST',
+   method: 'POST', signal,
    headers: { 'Content-Type': 'application/json' },
    body: JSON.stringify({ system: buildReviewPrompt(), messages: msgs, max_tokens: 2000 })
   });
@@ -7048,32 +7058,43 @@ ${amdLines ? `【Amendment 변경사항】\n${amdLines}` : ''}
 
  const handleSearch = async () => {
   if (!query.trim() || loading) return;
+  abortRef.current = new AbortController();
   setLoading(true);
-  const relatedClauses = searchClauses(query);
   try {
-   const answer = await askAI(query, []);
-   setMessages([{ role: 'user', content: query }, { role: 'assistant', content: answer, clauses: relatedClauses }]);
+   const answer = await askAI(query, [], abortRef.current.signal);
+   const refClauses = extractClauseIds(answer);
+   setMessages([{ role: 'user', content: query }, { role: 'assistant', content: answer, clauses: refClauses }]);
   } catch(e) {
-   setMessages([{ role: 'user', content: query }, { role: 'assistant', content: '오류가 발생했습니다: ' + e.message, clauses: [] }]);
+   if (e.name !== 'AbortError')
+    setMessages([{ role: 'user', content: query }, { role: 'assistant', content: '오류: ' + e.message, clauses: [] }]);
   }
   setLoading(false);
+  abortRef.current = null;
  };
 
  const handleFollowUp = async () => {
   if (!input.trim() || loading) return;
   const userMsg = input.trim();
   setInput('');
+  abortRef.current = new AbortController();
   setLoading(true);
-  const relatedClauses = searchClauses(userMsg);
   const history = messages.map(m => ({ role: m.role, content: m.content }));
   const newMsgs = [...messages, { role: 'user', content: userMsg }];
   setMessages(newMsgs);
   try {
-   const answer = await askAI(userMsg, history);
-   setMessages([...newMsgs, { role: 'assistant', content: answer, clauses: relatedClauses }]);
+   const answer = await askAI(userMsg, history, abortRef.current.signal);
+   const refClauses = extractClauseIds(answer);
+   setMessages([...newMsgs, { role: 'assistant', content: answer, clauses: refClauses }]);
   } catch(e) {
-   setMessages([...newMsgs, { role: 'assistant', content: '오류: ' + e.message, clauses: [] }]);
+   if (e.name !== 'AbortError')
+    setMessages([...newMsgs, { role: 'assistant', content: '오류: ' + e.message, clauses: [] }]);
   }
+  setLoading(false);
+  abortRef.current = null;
+ };
+
+ const handleStop = () => {
+  abortRef.current?.abort();
   setLoading(false);
  };
 
@@ -7179,6 +7200,17 @@ ${amdLines ? `【Amendment 변경사항】\n${amdLines}` : ''}
         ) : (
          <div style={S.aiBubble}>
           <div style={{whiteSpace:'pre-wrap', lineHeight:1.8}}>{m.content}</div>
+          {m.clauses?.length > 0 && (
+           <div style={{marginTop:12, borderTop:'1px solid #1e293b', paddingTop:10, display:'flex', flexDirection:'column', gap:6}}>
+            <div style={{fontSize:10, color:'#475569', marginBottom:2}}>참조 조항</div>
+            {m.clauses.map((c,ci)=>(
+             <div key={ci} style={S.clauseCard}>
+              <div style={{fontSize:10, fontWeight:700, color:'#60a5fa', marginBottom:2}}>{c.id} · {c.doc}</div>
+              <div style={{fontSize:11, color:'#94a3b8', lineHeight:1.6}}>{(c.core||c.text||'').slice(0,200)}{(c.core||c.text||'').length>200?'…':''}</div>
+             </div>
+            ))}
+           </div>
+          )}
          </div>
         )}
        </div>
@@ -7199,11 +7231,19 @@ ${amdLines ? `【Amendment 변경사항】\n${amdLines}` : ''}
        style={{flex:1, background:'#0f172a', border:'1px solid #334155', borderRadius:6,
         padding:'9px 12px', fontSize:12, color:'#e2e8f0', fontFamily:'inherit', outline:'none'}}
       />
-      <button onClick={handleFollowUp} disabled={loading||!input.trim()}
-       style={{padding:'9px 16px', background:'#2563eb', color:'#fff', border:'none',
-        borderRadius:6, fontSize:12, cursor:'pointer', opacity:loading||!input.trim()?0.5:1}}>
-       전송
-      </button>
+      {loading ? (
+       <button onClick={handleStop}
+        style={{padding:'9px 14px', background:'#7f1d1d', color:'#fca5a5', border:'1px solid #ef444433',
+         borderRadius:6, fontSize:12, cursor:'pointer', whiteSpace:'nowrap'}}>
+        ■ 중단
+       </button>
+      ) : (
+       <button onClick={handleFollowUp} disabled={!input.trim()}
+        style={{padding:'9px 16px', background:'#2563eb', color:'#fff', border:'none',
+         borderRadius:6, fontSize:12, cursor:'pointer', opacity:!input.trim()?0.5:1}}>
+        전송
+       </button>
+      )}
      </div>
     </>
    )}
