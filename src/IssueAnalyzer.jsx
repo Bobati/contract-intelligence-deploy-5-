@@ -504,7 +504,7 @@ export default function IssueAnalyzer() {
    />
   )}
 
-  {appTab==="review" && <ClauseReviewTab clauses={clauses} conflicts={conflicts} amendments={amendments}/>}
+  {appTab==="review" && <ClauseReviewTab clauses={CONTRACT_KB.clauses} conflicts={CONTRACT_KB.conflicts} amendments={amendments}/>}
   {appTab==="timeline" && <ClauseTimelineTab onOpenClause={setGlobalViewingClause}/>}
   {appTab==="hurdle" && <HurdleTracker/>}
 
