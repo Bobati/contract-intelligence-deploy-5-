@@ -110,7 +110,7 @@ const ISSUE_TEMPLATES = [
 export default function IssueAnalyzer() {
  const [sessionCode, setSessionCode] = useState(SESSION_ID);
  const [sessionReady, setSessionReady] = useState(!!SESSION_ID);
- const [appTab, setAppTab] = useState("docs"); // "docs" | "analyze"
+ const [appTab, setAppTab] = useState("analyze"); // "docs" | "analyze"
  const [globalViewingClause, setGlobalViewingClause] = useState(null);
  const [mode, setMode] = useState("auto");
  const [input, setInput] = useState("");
@@ -430,7 +430,7 @@ export default function IssueAnalyzer() {
   <div style={{width:1,height:24,background:"#334155",flexShrink:0}}/>
   {/* 탭 */}
   <div style={{display:"flex",gap:1}}>
-   {[["docs","문서 관리"],["analyze","이슈 분석"],["hurdle","Hurdle"],["timeline","변경 이력"],["history","히스토리"]].map(([tab,label])=>(
+   {[["analyze","이슈 분석"],["hurdle","Hurdle"],["timeline","변경 이력"],["history","히스토리"],["docs","문서 관리"]].map(([tab,label])=>(
     <button key={tab} onClick={()=>setAppTab(tab)}
      style={{padding:"6px 14px",borderRadius:4,border:"none",cursor:"pointer",
       fontSize:12,fontWeight:appTab===tab?600:400,fontFamily:"inherit",
@@ -5317,6 +5317,21 @@ function ClauseTimelineTab({ onOpenClause }) {
  const [selectedId, setSelectedId] = useState(null); // 조항 ID 필터
  const [search, setSearch] = useState("");
  const [expandedAmds, setExpandedAmds] = useState({});
+ const [editingDateId, setEditingDateId] = useState(null);
+ const [dateInput, setDateInput] = useState("");
+
+ const deleteEntry = async (id) => {
+  const next = patchHistory.filter(h => h.id !== id);
+  setPatchHistory(next);
+  try { await storage.set('kb_patches_v1', JSON.stringify(next)); } catch(e) {}
+ };
+
+ const saveEffectiveDate = async (id) => {
+  const next = patchHistory.map(h => h.id === id ? { ...h, effectiveDate: dateInput || null } : h);
+  setPatchHistory(next);
+  try { await storage.set('kb_patches_v1', JSON.stringify(next)); } catch(e) {}
+  setEditingDateId(null);
+ };
 
  const allClauseIds = [...new Set(
  patchHistory.flatMap(h => (h.patches||[]).map(p => p.clauseId))
@@ -5413,6 +5428,9 @@ function ClauseTimelineTab({ onOpenClause }) {
  <span style={{fontSize:10, color:"#475569", marginLeft:"auto"}}>
  {h.effectiveDate || h.uploadedAt?.slice(0,10) || "날짜 미상"}
  </span>
+ <button onClick={e=>{ e.stopPropagation(); if(window.confirm(`"${h.fileName}" 이력을 삭제하시겠습니까?`)) deleteEntry(h.id); }}
+  style={{background:"none", border:"none", cursor:"pointer", color:"#64748b", fontSize:13,
+  padding:"0 2px", lineHeight:1, marginLeft:2}} title="이력 삭제">✕</button>
  </div>
  <div style={{fontSize:10, color:"#cbd5e1", marginBottom:3,
  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
@@ -5515,11 +5533,31 @@ function ClauseTimelineTab({ onOpenClause }) {
  {h.docType}
  </span>
  <span style={{fontSize:11, color:"#cbd5e1", fontWeight:600}}>{h.fileName}</span>
- <span style={{fontSize:11, color:"#475569", marginLeft:"auto"}}>
- {h.effectiveDate
- ? `발효일 ${h.effectiveDate}`
- : `업로드 ${h.uploadedAt?.slice(0,10)||""}`}
- </span>
+ <div style={{marginLeft:"auto", display:"flex", alignItems:"center", gap:6}}>
+  {editingDateId === h.id ? (
+   <>
+   <input type="date" value={dateInput} onChange={e=>setDateInput(e.target.value)}
+    style={{fontSize:11, background:"#1e293b", border:"1px solid #60a5fa",
+    borderRadius:4, color:"#e2e8f0", padding:"2px 6px", fontFamily:"inherit"}}/>
+   <button onClick={()=>saveEffectiveDate(h.id)}
+    style={{fontSize:10, background:"#2563eb", color:"#fff", border:"none",
+    borderRadius:4, padding:"2px 7px", cursor:"pointer"}}>저장</button>
+   <button onClick={()=>setEditingDateId(null)}
+    style={{fontSize:10, background:"#334155", color:"#94a3b8", border:"none",
+    borderRadius:4, padding:"2px 7px", cursor:"pointer"}}>취소</button>
+   </>
+  ) : (
+   <>
+   <div style={{fontSize:11, color:"#475569", textAlign:"right"}}>
+    {h.effectiveDate && <div style={{color:"#60a5fa"}}>공식변경일 {h.effectiveDate}</div>}
+    <div>업로드 {h.uploadedAt?.slice(0,10)||""}</div>
+   </div>
+   <button onClick={()=>{ setEditingDateId(h.id); setDateInput(h.effectiveDate||""); }}
+    style={{fontSize:10, background:"#1e293b", color:"#64748b", border:"1px solid #334155",
+    borderRadius:4, padding:"2px 6px", cursor:"pointer"}} title="공식 변경일 편집">✎</button>
+   </>
+  )}
+ </div>
  </div>
  {h.summary && (
  <div style={{fontSize:12, color:"#94a3b8", lineHeight:1.65,
