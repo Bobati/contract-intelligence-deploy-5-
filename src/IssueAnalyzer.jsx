@@ -3267,7 +3267,12 @@ const [expandedPendingRows, setExpandedPendingRows] = useState({});
  const { docs: d, clauses: c, conflicts: cf } = await DocDB.load();
  if (d) setDocs(d);
  if (c) { setClauses(c); CONTRACT_KB.clauses = c; }
- if (cf) { setConflicts(cf); CONTRACT_KB.conflicts = cf; }
+ if (cf) {
+ // 저장된 AI 충돌과 기본 충돌(BASE_CONFLICTS) 병합 — 기본 충돌은 항상 유지
+ const savedIds = new Set(cf.map(c => c.id));
+ const merged = [...BASE_CONFLICTS.filter(bc => !savedIds.has(bc.id)), ...cf];
+ setConflicts(merged); CONTRACT_KB.conflicts = merged;
+}
  if (c) for (const cl of c) {
  if (cl.text) CLAUSE_FULLTEXT[cl.id] = {
  doc: cl.doc, section: cl.section||cl.id, title: cl.title||cl.topic,
