@@ -7023,7 +7023,10 @@ ${amdLines ? `【Amendment 변경사항】\n${amdLines}` : ''}
   });
   if (!res.ok) throw new Error('API 오류 ' + res.status);
   const data = await res.json();
-  return data.content || data.text || data.choices?.[0]?.message?.content || '';
+  const raw = data.content ?? data.text ?? data.choices?.[0]?.message?.content ?? '';
+  if (Array.isArray(raw)) return raw.filter(b=>b?.type==='text').map(b=>b.text).join('');
+  if (typeof raw === 'object' && raw !== null) return raw.text ?? JSON.stringify(raw);
+  return String(raw);
  };
 
  const handleSearch = async () => {
