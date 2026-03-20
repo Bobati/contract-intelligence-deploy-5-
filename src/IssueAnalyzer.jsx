@@ -6963,9 +6963,9 @@ function ClauseReviewTab({ clauses, conflicts, amendments }) {
  const [input, setInput] = useState('');
  const [loading, setLoading] = useState(false);
  const [reportMode, setReportMode] = useState(false);
- const bottomRef = React.useRef(null);
+ const bottomRef = useRef(null);
 
- React.useEffect(() => {
+ useEffect(() => {
   bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
  }, [messages, loading]);
 
