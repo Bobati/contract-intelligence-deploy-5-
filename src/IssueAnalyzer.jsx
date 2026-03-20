@@ -1177,6 +1177,27 @@ let CONTRACT_KB = {
  appendix7: ["현대자동차","기아","포스코","한화시스템","현대로템","현대글로비스","CJ제일제당","한국해양진흥공사","서울아산병원","산업통상자원부"],
 };
 
+// 하드코딩된 기본 충돌 목록 (덮어쓰기 방지용 원본 보존)
+const BASE_CONFLICTS = CONTRACT_KB.conflicts.map(c => ({...c}));
+
+// clauseIds에서 관련 문서(docs) 자동 도출
+function inferDocsFromClauseIds(clauseIds) {
+ const docKeyMap = { SAA:'SAA', TOS:'TOS', OF3:'OF3', OF4:'OF4' };
+ const regKeyMap = [
+  ['하도급', '하도급지침'], ['정보보호', '정보보호지침'],
+  ['회계', '회계규정'], ['계약규정', '계약규정'], ['협력사', '협력사선정지침'],
+ ];
+ const docs = new Set();
+ for (const id of (clauseIds || [])) {
+  const prefix = id.split('-')[0];
+  if (docKeyMap[prefix]) { docs.add(docKeyMap[prefix]); continue; }
+  for (const [keyword, docType] of regKeyMap) {
+   if (id.includes(keyword)) { docs.add(docType); break; }
+  }
+ }
+ return docs.size > 0 ? Array.from(docs) : undefined;
+}
+
 // --- KB PATCH ENGINE ----------------------------------------------------------
 function normalizeClauseKey(v) {
  return (v || "")
@@ -3946,6 +3967,7 @@ return;
   const baseIds = Array.isArray(cf?.clauseIds) ? cf.clauseIds.filter(Boolean) : [];
   const recovered = baseIds.length > 0 ? baseIds : extractIdsFromText((cf?.summary || '') + ' ' + (cf?.why || ''));
   const uniqIds = Array.from(new Set(recovered));
+  const inferredDocs = inferDocsFromClauseIds(uniqIds);
   return {
    id: cf?.id || `XC-NEW-${String(idx + 1).padStart(3, '0')}`,
    risk: ['HIGH','MEDIUM','LOW'].includes(String(cf?.risk || '').toUpperCase()) ? String(cf.risk).toUpperCase() : 'MEDIUM',
@@ -3955,6 +3977,7 @@ return;
    impact: cf?.impact || '',
    resolution: cf?.resolution || cf?.recommendation || '',
    clauseIds: uniqIds,
+   ...(inferredDocs ? { docs: inferredDocs } : {}),
   };
  };
  newConflicts = (Array.isArray(newConflicts) ? newConflicts : []).map(normalizeOne).filter(cf => Array.isArray(cf.clauseIds) && cf.clauseIds.length >= 2);
@@ -3968,9 +3991,15 @@ return;
   });
  }
 
- CONTRACT_KB.conflicts = newConflicts;
- setConflicts(newConflicts);
- await DocDB.saveConflicts(newConflicts);
+ // 기본 충돌(BASE_CONFLICTS)은 유지하고, AI 결과로 갱신/추가 (병합)
+ const aiIds = new Set(newConflicts.map(c => c.id));
+ const merged = [
+  ...BASE_CONFLICTS.filter(bc => !aiIds.has(bc.id)),
+  ...newConflicts,
+ ];
+ CONTRACT_KB.conflicts = merged;
+ setConflicts(merged);
+ await DocDB.saveConflicts(merged);
  if (onKBUpdated) onKBUpdated({ docs, clauses: cl, conflicts: newConflicts });
 
  setConflictStatus({ status:'ok',
