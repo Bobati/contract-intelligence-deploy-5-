@@ -1161,18 +1161,18 @@ let CONTRACT_KB = {
  { id:"LAW-민법-544조", doc:"민법", topic:"계약 해지 및 최고 절차", core:"채무불이행 시 상당 기간 최고 후 해제 가능. 이행 거절 명시 시 최고 불필요", text:"당사자 일방이 그 채무를 이행하지 아니하는 때에는 상대방은 상당한 기간을 정하여 그 이행을 최고하고 그 기간 내에 이행하지 아니한 때에는 계약을 해제할 수 있다. 그러나 채무자가 미리 이행하지 아니할 의사를 표시한 경우에는 최고를 요하지 아니한다.", translation:"채무불이행 시 상당 기간 최고 후 계약 해제 가능. 이행 거절 명시 시 최고 불필요.", kt_risk:"SAA §6.2 20일 치유 기간과 민법 상당 기간 개념 중첩. 한국법 준거 시(SAA §9.0) 민법 적용. 치유 기간 충족 없이 해지 주장 시 위법 가능성.", section:"민법 제544조 (이행지체와 해제)", title:"계약 해지 및 최고 절차" },
  ],
  conflicts: [
- { id:"XC-001", risk:"HIGH", topic:"치유 기간", summary:"SAA §6.2 (20일) vs TOS §8.2 (30일)" },
- { id:"XC-002", risk:"HIGH", topic:"Liability Cap", summary:"SAA §8.2 ($10M) vs TOS §12 ($100K)" },
- { id:"XC-003", risk:"HIGH", topic:"준거법·중재지", summary:"SAA §9.0 (한국법/서울) vs TOS §13 (영국법/런던)" },
- { id:"XC-004", risk:"HIGH", topic:"서비스 즉시 정지", summary:"TOS §8.4 즉시 정지로 SAA 20일 치유 기간 우회 가능" },
- { id:"XC-005", risk:"HIGH", topic:"해지 후 잔여 Fee", summary:"SAA §6.3 (협상) vs OF4 (ratable 기준)" },
- { id:"IC-001", risk:"HIGH", topic:"독점 vs EBT", summary:"SAA §1.3.2 직접 판매 금지 vs §2.10 EBT 협의" },
- { id:"IC-002", risk:"HIGH", topic:"Surviving QRC 배분", summary:"SAA §6.3 (협상) vs §2.11 (10%/90% 고정)" },
- { id:"EC-001", risk:"HIGH", topic:"연체이자율 충돌", summary:"TOS §7 월 1.5%(연18%) vs 하도급법 제13조 공정위 고시 이율(연15.5%). 하도급법 적용 시 법령 우선." },
- { id:"EC-002", risk:"HIGH", topic:"해지 최고 기간", summary:"하도급법 제16조 1개월 vs SAA §6.2 20일 vs TOS §8.2 30일. 강행규정 적용 시 1개월 기준 우선." },
- { id:"EC-003", risk:"HIGH", topic:"CISO 보안성 승인", summary:"Azure 도입 전 CISO 승인 의무 vs OF4 즉시 사용" },
- { id:"EC-004", risk:"HIGH", topic:"가급 자산 외부 제공", summary:"정보보호지침 사전승인 vs TOS §3 데이터 처리 허용" },
- { id:"EC-005", risk:"HIGH", topic:"예산 집행 원칙", summary:"회계규정 예산 범위 내 집행 vs OF4 즉시 $4M 지급" },
+ { id:"XC-001", risk:"HIGH", topic:"치유 기간", summary:"SAA §6.2 (20일) vs TOS §8.2 (30일)", docs:["SAA","TOS"] },
+ { id:"XC-002", risk:"HIGH", topic:"Liability Cap", summary:"SAA §8.2 ($10M) vs TOS §12 ($100K)", docs:["SAA","TOS"] },
+ { id:"XC-003", risk:"HIGH", topic:"준거법·중재지", summary:"SAA §9.0 (한국법/서울) vs TOS §13 (영국법/런던)", docs:["SAA","TOS"] },
+ { id:"XC-004", risk:"HIGH", topic:"서비스 즉시 정지", summary:"TOS §8.4 즉시 정지로 SAA 20일 치유 기간 우회 가능", docs:["SAA","TOS"] },
+ { id:"XC-005", risk:"HIGH", topic:"해지 후 잔여 Fee", summary:"SAA §6.3 (협상) vs OF4 (ratable 기준)", docs:["SAA","OF4"] },
+ { id:"IC-001", risk:"HIGH", topic:"독점 vs EBT", summary:"SAA §1.3.2 직접 판매 금지 vs §2.10 EBT 협의", docs:["SAA"] },
+ { id:"IC-002", risk:"HIGH", topic:"Surviving QRC 배분", summary:"SAA §6.3 (협상) vs §2.11 (10%/90% 고정)", docs:["SAA"] },
+ { id:"EC-001", risk:"HIGH", topic:"연체이자율 충돌", summary:"TOS §7 월 1.5%(연18%) vs 하도급법 제13조 공정위 고시 이율(연15.5%). 하도급법 적용 시 법령 우선.", docs:["TOS","하도급지침"] },
+ { id:"EC-002", risk:"HIGH", topic:"해지 최고 기간", summary:"하도급법 제16조 1개월 vs SAA §6.2 20일 vs TOS §8.2 30일. 강행규정 적용 시 1개월 기준 우선.", docs:["SAA","TOS","하도급지침"] },
+ { id:"EC-003", risk:"HIGH", topic:"CISO 보안성 승인", summary:"Azure 도입 전 CISO 승인 의무 vs OF4 즉시 사용", docs:["OF4","정보보호지침"] },
+ { id:"EC-004", risk:"HIGH", topic:"가급 자산 외부 제공", summary:"정보보호지침 사전승인 vs TOS §3 데이터 처리 허용", docs:["TOS","정보보호지침"] },
+ { id:"EC-005", risk:"HIGH", topic:"예산 집행 원칙", summary:"회계규정 예산 범위 내 집행 vs OF4 즉시 $4M 지급", docs:["OF4","회계규정"] },
  ],
  appendix7: ["현대자동차","기아","포스코","한화시스템","현대로템","현대글로비스","CJ제일제당","한국해양진흥공사","서울아산병원","산업통상자원부"],
 };
@@ -4166,7 +4166,7 @@ return;
  const fakeDoc = { id:'builtin_'+bd.key, fileName:bd.label, docType:bd.key, _builtin:true };
  return (
  <div key={bd.key}
- onClick={()=>{ setSelectedDoc(isSelected?null:fakeDoc); setRightView('clauses'); }}
+ onClick={()=>{ setSelectedDoc(isSelected?null:fakeDoc); }}
  style={{marginBottom:5, borderRadius:5, padding:'8px 10px', cursor:'pointer',
  border:`1px solid ${isSelected?bd.color+'55':'#1e2030'}`,
  background:isSelected?bd.color+'0a':'#0f0f1a'}}>
@@ -4233,7 +4233,7 @@ return;
  {/* 뷰 전환 탭 */}
  <div style={{display:'flex', borderBottom:'1px solid #1a1a2e', background:'#0a0a14', padding:'0 16px', gap:16}}>
  {[
- ['conflicts', `충돌 현황`, conflicts.length],
+ ['conflicts', `충돌 현황`, selectedDoc ? conflicts.filter(cf => !cf.docs || cf.docs.includes(selectedDoc.docType)).length : conflicts.length],
  ['clauses', selectedDoc ? selectedDoc.fileName : '전체 조항',
  selectedDoc
  ? selectedDoc._builtin
@@ -4334,11 +4334,13 @@ return;
  </div>
  : <>
  <div style={{fontSize:10, color:'#6677aa', marginBottom:12}}>
- 총 {conflicts.length}건의 조항 간 충돌이 탐지되었습니다.
+ {selectedDoc
+  ? <>선택 문서 관련 충돌 <span style={{color:'#cbd5e1', fontWeight:600}}>{conflicts.filter(cf=>!cf.docs||cf.docs.includes(selectedDoc.docType)).length}건</span> · 전체 {conflicts.length}건</>
+  : <>총 {conflicts.length}건의 조항 간 충돌이 탐지되었습니다.</>}
  {conflictScope === 'amendment-only' && <span style={{color:'#fbbf24', marginLeft:6}}>Amendment 변경 조항과 타 조항 간 충돌만 표시</span>}
  {highConflicts > 0 && <span style={{color:'#ff2d20', marginLeft:6}}>HIGH {highConflicts}건 즉시 검토 필요</span>}
  </div>
- {conflicts.map((cf,i) => {
+ {(selectedDoc ? conflicts.filter(cf => !cf.docs || cf.docs.includes(selectedDoc.docType)) : conflicts).map((cf,i) => {
  const rc = RISK_COLOR[cf.risk]||'#8899aa';
  const pairIds = Array.isArray(cf.clauseIds) ? cf.clauseIds.slice(0, 2) : [];
  const pairClauses = pairIds.map(id => clauses.find(c => c.id === id) || CONTRACT_KB.clauses.find(c => c.id === id)).filter(Boolean);
