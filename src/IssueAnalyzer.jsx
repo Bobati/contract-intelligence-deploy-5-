@@ -504,7 +504,7 @@ export default function IssueAnalyzer() {
    />
   )}
 
-  {appTab==="review" && <ErrorBoundary><ClauseReviewTab clauses={CONTRACT_KB.clauses} conflicts={CONTRACT_KB.conflicts} amendments={amendments}/></ErrorBoundary>}
+  {appTab==="review" && <ErrorBoundary><ClauseReviewTab clauses={CONTRACT_KB.clauses} conflicts={CONTRACT_KB.conflicts} amendments={amendments} onOpenClause={setGlobalViewingClause}/></ErrorBoundary>}
   {appTab==="timeline" && <ClauseTimelineTab onOpenClause={setGlobalViewingClause}/>}
   {appTab==="hurdle" && <HurdleTracker/>}
 
@@ -6957,7 +6957,7 @@ ${ktGoals || '(\uba85\uc2dc \uc5c6\uc74c \u2014 KT \uc804\ubc18\uc801 \uc774\uc7
 // ══════════════════════════════════════════════════════
 // 조항 검토 탭
 // ══════════════════════════════════════════════════════
-function ClauseReviewTab({ clauses, conflicts, amendments }) {
+function ClauseReviewTab({ clauses, conflicts, amendments, onOpenClause }) {
  const [query, setQuery] = useState('');
  const [messages, setMessages] = useState([]); // [{role, content, clauses:[]}]
  const [input, setInput] = useState('');
@@ -7199,14 +7199,18 @@ ${amdLines ? `【Amendment 변경사항】\n${amdLines}` : ''}
          <div style={S.userBubble}>{m.content}</div>
         ) : (
          <div style={S.aiBubble}>
-          <div style={{whiteSpace:'pre-wrap', lineHeight:1.8}}>{m.content}</div>
+          <div style={{lineHeight:1.8}}>
+           {m.content.split('\n').map((line,li)=>(
+            <span key={li}>{linkifyClauses(line, onOpenClause)}{li<m.content.split('\n').length-1&&<br/>}</span>
+           ))}
+          </div>
           {m.clauses?.length > 0 && (
            <div style={{marginTop:12, borderTop:'1px solid #1e293b', paddingTop:10, display:'flex', flexDirection:'column', gap:6}}>
             <div style={{fontSize:10, color:'#475569', marginBottom:2}}>참조 조항</div>
             {m.clauses.map((c,ci)=>(
              <div key={ci} style={S.clauseCard}>
-              <div style={{fontSize:10, fontWeight:700, color:'#60a5fa', marginBottom:2}}>{c.id} · {c.doc}</div>
-              <div style={{fontSize:11, color:'#94a3b8', lineHeight:1.6}}>{(c.core||c.text||'').slice(0,200)}{(c.core||c.text||'').length>200?'…':''}</div>
+              <div style={{fontSize:10, fontWeight:700, color:'#60a5fa', marginBottom:2}}>{linkifyClauses(c.id, onOpenClause)} · {c.doc}</div>
+              <div style={{fontSize:11, color:'#94a3b8', lineHeight:1.6}}>{linkifyClauses((c.core||c.text||'').slice(0,200), onOpenClause)}{(c.core||c.text||'').length>200?'…':''}</div>
              </div>
             ))}
            </div>
