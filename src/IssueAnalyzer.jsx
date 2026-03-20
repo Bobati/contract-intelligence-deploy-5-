@@ -6970,9 +6970,24 @@ function ClauseReviewTab({ clauses, conflicts, amendments }) {
  }, [messages, loading]);
 
  const buildReviewPrompt = () => {
-  const clauseLines = (clauses || []).slice(0, 120).map(c =>
-   `[${c.id}] (${c.doc}) ${c.topic||''}: ${(c.core||c.text||'').slice(0,300)}`
-  ).join('\n');
+  // 문서별로 그룹화하여 균등하게 포함
+  const docOrder = ['SAA','TOS','OF3','OF4','하도급지침','정보보호지침','회계규정','계약규정','협력사선정지침','Amendment','하도급법'];
+  const grouped = {};
+  for (const c of (clauses || [])) {
+   const d = c.doc || 'OTHER';
+   if (!grouped[d]) grouped[d] = [];
+   grouped[d].push(c);
+  }
+  const clauseLines = docOrder
+   .filter(d => grouped[d]?.length)
+   .map(d => {
+    const header = `\n=== ${d} ===`;
+    const rows = grouped[d].map(c =>
+     `[${c.id}] ${c.topic||''}: ${(c.core||c.text||'').slice(0,250)}`
+    ).join('\n');
+    return header + '\n' + rows;
+   }).join('\n');
+
   const conflictLines = (conflicts || []).map(cf =>
    `[${cf.id}] ${cf.topic}: ${cf.summary}`
   ).join('\n');
@@ -6983,13 +6998,15 @@ function ClauseReviewTab({ clauses, conflicts, amendments }) {
   return `당신은 계약서 조항 검토 전문가입니다. 아래 계약서 내용을 바탕으로 질문에 답하세요.
 
 【역할】
-- 계약서에 실제로 기재된 내용을 중립적·사실적으로 정리
+- 질문과 관련된 모든 문서(SAA, TOS, OF3, OF4, 내규 등)를 반드시 전수 검토할 것
+- 계약서에 실제로 기재된 내용만 중립적·사실적으로 정리
 - 양사의 법적 유불리 분석이나 전략적 조언은 하지 않음
-- 관련 조항 번호(예: SAA §6.2)와 출처 문서를 반드시 명시
+- 관련 조항 번호(예: SAA §6.2, OF3-FEES)와 출처 문서를 반드시 명시
 - 충돌하는 조항이 있으면 "A문서에는 ~, B문서에는 ~라고 규정되어 있습니다"로 병기
 - "~라고 규정되어 있습니다", "~로 정의됩니다", "~에 따르면" 등 사실 서술체 사용
+- 관련 내용이 없는 문서는 언급하지 않음
 
-【계약서 조항】
+【계약서 조항 (문서별)】
 ${clauseLines}
 
 【식별된 충돌】
@@ -6998,9 +7015,9 @@ ${conflictLines}
 ${amdLines ? `【Amendment 변경사항】\n${amdLines}` : ''}
 
 【응답 형식】
-1. 관련 조항 요약 (조항별로 구분하여 서술)
+1. 관련 조항 요약 (문서별로 구분하여 서술, 관련 없는 문서는 생략)
 2. 문서 간 동일/충돌 내용이 있으면 별도 항목으로 정리
-3. 마지막에 "관련 조항:" 으로 참조된 조항 ID 목록 표시`;
+3. 마지막에 "참조 조항:" 으로 참조된 조항 ID 목록 표시`;
  };
 
  const searchClauses = (q) => {
@@ -7162,17 +7179,6 @@ ${amdLines ? `【Amendment 변경사항】\n${amdLines}` : ''}
         ) : (
          <div style={S.aiBubble}>
           <div style={{whiteSpace:'pre-wrap', lineHeight:1.8}}>{m.content}</div>
-          {m.clauses?.length > 0 && (
-           <div style={{marginTop:12, display:'flex', flexWrap:'wrap', gap:6}}>
-            <div style={{width:'100%', fontSize:10, color:'#475569', marginBottom:4}}>관련 조항</div>
-            {m.clauses.map((c,ci)=>(
-             <div key={ci} style={S.clauseCard}>
-              <div style={{fontSize:10, fontWeight:700, color:'#60a5fa', marginBottom:3}}>{c.id} · {c.doc}</div>
-              <div style={{fontSize:11, color:'#94a3b8', lineHeight:1.6}}>{(c.core||c.text||'').slice(0,200)}{(c.core||c.text||'').length>200?'…':''}</div>
-             </div>
-            ))}
-           </div>
-          )}
          </div>
         )}
        </div>
