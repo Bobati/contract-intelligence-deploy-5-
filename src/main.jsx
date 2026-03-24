@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import IssueAnalyzer from './IssueAnalyzer.jsx';
 
-const PASSWORD = 'spa본부';
+const PASSWORD = 'spaqhsqn';
 
 function PasswordGate() {
   const [input, setInput] = useState('');
