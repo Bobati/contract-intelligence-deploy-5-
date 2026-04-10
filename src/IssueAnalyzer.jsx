@@ -8582,7 +8582,6 @@ ${amdLines ? `【Amendment 변경사항】\n${amdLines}` : ''}
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// ══════════════════════════════════════════════════════════════════════════════
 // 법률검토 탭 — 범용 법적 분석 (KT/Palantir 계약 무관)
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -9264,12 +9263,52 @@ function GeneralLegalReviewTab() {
  const [legalHistory, setLegalHistory] = useState(() => {
   try { const s = localStorage.getItem("general_legal_history_v2"); return s ? JSON.parse(s) : []; } catch { return []; }
  });
- const [activeId, setActiveId] = useState(null);
- const abortRef = useRef(null);
- const fileRef  = useRef(null);
+ const [activeId, setActiveId]   = useState(null);
+ const [leftTab, setLeftTab]     = useState("review"); // "review" | "history"
+ // 추가검토 채팅
+ const [chatMsgs, setChatMsgs]   = useState([]);
+ const [chatInput, setChatInput] = useState("");
+ const [chatLoading, setChatLoading] = useState(false);
+ const abortRef   = useRef(null);
+ const chatAbortRef = useRef(null);
+ const fileRef    = useRef(null);
+ const chatEndRef = useRef(null);
 
  const saveLegalHistory = (h) => {
   try { localStorage.setItem("general_legal_history_v2", JSON.stringify(h.slice(-30))); } catch {}
+ };
+
+ // 추가검토: LLM 채팅
+ const sendChat = async () => {
+  const q = chatInput.trim();
+  if (!q || chatLoading) return;
+  setChatInput("");
+  const userMsg = { role:"user", content:q };
+  const msgs = [...chatMsgs, userMsg];
+  setChatMsgs(msgs);
+  setChatLoading(true);
+  const abortCtrl = new AbortController();
+  chatAbortRef.current = abortCtrl;
+  // 현재 분석 결과를 시스템 컨텍스트로 활용
+  const sysCtx = result
+   ? `당신은 법률·사업·기술 통합 전문 AI 어시스턴트입니다.\n\n[현재 검토 컨텍스트]\n의뢰인: ${clientName||"의뢰인"} / 상대방: ${opponentName||"상대방"}\n이슈: ${currentQuery}\n위험도: ${result.risk_level}\n핵심 결론: ${result.bottom_line}\n상황 요약: ${result.situation_summary}\n\n위 분석 결과를 바탕으로 추가 질문에 답하세요. 간결하고 실용적으로 답변하세요.`
+   : `당신은 법률·사업·기술 통합 전문 AI 어시스턴트입니다. 간결하고 실용적으로 답변하세요.`;
+  try {
+   const res = await fetch("/api/chat", {
+    method:"POST", headers:{"Content-Type":"application/json"}, signal: abortCtrl.signal,
+    body: JSON.stringify({
+     system: sysCtx,
+     max_tokens: 2048,
+     messages: msgs.map(m=>({role:m.role,content:m.content})),
+    }),
+   });
+   const data = await res.json();
+   const text = (data.content||[]).map(c=>c.text||"").join("").trim() || "(응답 없음)";
+   setChatMsgs(prev=>[...prev,{role:"assistant",content:text}]);
+   setTimeout(()=>chatEndRef.current?.scrollIntoView({behavior:"smooth"}),50);
+  } catch(e) {
+   if (e.name!=="AbortError") setChatMsgs(prev=>[...prev,{role:"assistant",content:"오류: "+e.message}]);
+  } finally { setChatLoading(false); chatAbortRef.current=null; }
  };
 
  const handleFileUpload = (e) => {
@@ -9363,117 +9402,201 @@ function GeneralLegalReviewTab() {
   <div style={{display:"grid",gridTemplateColumns:"300px 1fr",height:"100%",fontFamily:S.font}}>
 
    {/* 왼쪽 사이드바 */}
-   <div style={{background:S.card,borderRight:`1px solid ${S.border}`,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-    <div style={{padding:"14px 16px",borderBottom:`1px solid ${S.border}`,overflowY:"auto",flexShrink:0}}>
-     <div style={{fontSize:10,fontWeight:700,color:S.t4,letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:12}}>
-      법률검토 — 4관점 통합 분석
-     </div>
+   <div style={{background:S.card,borderRight:`1px solid ${S.border}`,display:"flex",flexDirection:"column",height:"100%",overflow:"hidden"}}>
 
-     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-      {[["의뢰인","예: KT, A사",clientName,setClientName],["상대방","예: B사, 피고",opponentName,setOpponentName]].map(([label,ph,val,set])=>(
-       <div key={label}>
-        <div style={{fontSize:10,color:S.t4,marginBottom:4}}>{label}</div>
-        <input value={val} onChange={e=>set(e.target.value)} placeholder={ph}
-         style={{width:"100%",background:S.cardIn,border:`1px solid ${S.border}`,borderRadius:5,
-          padding:"7px 10px",fontSize:11,color:S.t1,outline:"none",boxSizing:"border-box"}}/>
-       </div>
-      ))}
-     </div>
-
-     <div style={{fontSize:10,color:S.t4,marginBottom:4}}>법적 상황 / 이슈 *</div>
-     <textarea value={situation} onChange={e=>setSituation(e.target.value)}
-      onKeyDown={e=>(e.metaKey||e.ctrlKey)&&e.key==="Enter"&&analyze()}
-      placeholder={"계약 위반, 분쟁, 협상 상황을 설명하세요.\n\nCtrl+Enter로 분석 실행"}
-      style={{width:"100%",background:S.cardIn,border:`1px solid ${S.border}`,borderRadius:6,
-       padding:"10px 12px",fontSize:12,color:S.t1,resize:"none",height:130,outline:"none",
-       lineHeight:1.7,boxSizing:"border-box",marginBottom:8}}/>
-
-     <div style={{fontSize:10,color:S.t4,marginBottom:4}}>참고 문서 (텍스트) <span style={{color:"#475569"}}>(선택)</span></div>
-     <textarea value={docContext} onChange={e=>setDocContext(e.target.value)}
-      placeholder="계약 조항이나 문서 내용 붙여넣기"
-      style={{width:"100%",background:S.cardIn,border:`1px solid ${S.border}`,borderRadius:6,
-       padding:"10px 12px",fontSize:11,color:S.t1,resize:"none",height:70,outline:"none",
-       lineHeight:1.7,boxSizing:"border-box",marginBottom:8}}/>
-
-     <div style={{marginBottom:10}}>
-      <div style={{fontSize:10,color:S.t4,marginBottom:5}}>제안서 파일 <span style={{color:"#475569"}}>(PDF · TXT · MD)</span></div>
-      <div style={{display:"flex",gap:6,alignItems:"center"}}>
-       <label style={{padding:"6px 12px",background:S.cardIn,border:`1px solid ${S.border}`,borderRadius:5,
-        fontSize:11,color:S.t3,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0,transition:"all .15s"}}
-        onMouseEnter={e=>{e.currentTarget.style.borderColor="#475569";e.currentTarget.style.color=S.t1;}}
-        onMouseLeave={e=>{e.currentTarget.style.borderColor=S.border;e.currentTarget.style.color=S.t3;}}>
-        📎 파일 선택
-        <input ref={fileRef} type="file" accept=".pdf,.txt,.md" style={{display:"none"}} onChange={handleFileUpload}/>
-       </label>
-       {uploadedFile ? (
-        <div style={{display:"flex",alignItems:"center",gap:6,padding:"4px 10px",
-         background:"#0d2d20",border:"1px solid #22c55e40",borderRadius:5,flex:1,minWidth:0}}>
-         <span style={{fontSize:10,color:"#86efac",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>
-          📄 {uploadedFile.name}
-         </span>
-         <button onClick={()=>setUploadedFile(null)}
-          style={{background:"none",border:"none",cursor:"pointer",color:S.t4,fontSize:12,padding:0,flexShrink:0}}
-          onMouseEnter={e=>e.currentTarget.style.color="#f87171"}
-          onMouseLeave={e=>e.currentTarget.style.color=S.t4}>✕</button>
-        </div>
-       ) : (
-        <span style={{fontSize:10,color:"#334155",lineHeight:1.5}}>PDF 업로드 시 AI가 직접 읽습니다</span>
-       )}
-      </div>
-     </div>
-
-     <div style={{display:"flex",gap:8}}>
-      <button onClick={analyze} disabled={!situation.trim()||loading}
-       style={{flex:1,padding:"9px 0",fontFamily:S.font,
-        background:situation.trim()&&!loading?"#1d4ed8":"#1e293b",
-        border:`1px solid ${situation.trim()&&!loading?"#3b82f660":"#334155"}`,
-        borderRadius:5,fontSize:12,fontWeight:600,
-        color:situation.trim()&&!loading?"#93c5fd":"#475569",
-        cursor:situation.trim()&&!loading?"pointer":"default",transition:"all 0.15s"}}>
-       {loading?"분석 중...":"법률 분석"}
+    {/* ── 탭 바: 제안검토 | 히스토리 ── */}
+    <div style={{display:"flex",borderBottom:`1px solid ${S.border}`,flexShrink:0,background:S.bg}}>
+     {[["review","제안검토"],["history","히스토리"]].map(([id,label])=>(
+      <button key={id} onClick={()=>setLeftTab(id)}
+       style={{flex:1,padding:"10px 0",border:"none",background:"transparent",cursor:"pointer",fontFamily:S.font,
+        fontSize:12,fontWeight:leftTab===id?700:400,
+        color:leftTab===id?"#e2e8f0":"#64748b",
+        borderBottom:leftTab===id?"2px solid #60a5fa":"2px solid transparent",
+        transition:"all 0.15s",marginBottom:-1}}>
+       {label}{id==="history"&&legalHistory.length>0?` (${legalHistory.length})`:""}
       </button>
-      {loading && (
-       <button onClick={()=>{if(abortRef.current)abortRef.current.abort();}}
-        style={{padding:"9px 12px",background:"transparent",border:"1px solid #475569",borderRadius:5,
-         fontSize:11,color:S.t4,cursor:"pointer",whiteSpace:"nowrap",fontFamily:S.font}}
-        onMouseEnter={e=>{e.currentTarget.style.borderColor="#ef4444";e.currentTarget.style.color="#f87171";}}
-        onMouseLeave={e=>{e.currentTarget.style.borderColor="#475569";e.currentTarget.style.color=S.t4;}}>
-        ✕ 중단
-       </button>
+     ))}
+    </div>
+
+    {/* ── 탭 콘텐츠 (flex:1) ── */}
+    <div style={{flex:1,overflowY:"auto",minHeight:0}}>
+
+     {/* 제안검토 탭 */}
+     {leftTab==="review" && (
+      <div style={{padding:"14px 16px"}}>
+       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+        {[["의뢰인","예: KT, A사",clientName,setClientName],["상대방","예: B사, 피고",opponentName,setOpponentName]].map(([label,ph,val,set])=>(
+         <div key={label}>
+          <div style={{fontSize:10,color:S.t4,marginBottom:4}}>{label}</div>
+          <input value={val} onChange={e=>set(e.target.value)} placeholder={ph}
+           style={{width:"100%",background:S.cardIn,border:`1px solid ${S.border}`,borderRadius:5,
+            padding:"7px 10px",fontSize:11,color:S.t1,outline:"none",boxSizing:"border-box"}}/>
+         </div>
+        ))}
+       </div>
+
+       <div style={{fontSize:10,color:S.t4,marginBottom:4}}>법적 상황 / 이슈 *</div>
+       <textarea value={situation} onChange={e=>setSituation(e.target.value)}
+        onKeyDown={e=>(e.metaKey||e.ctrlKey)&&e.key==="Enter"&&analyze()}
+        placeholder={"계약 위반, 분쟁, 협상 상황을 설명하세요.\n\nCtrl+Enter로 분석 실행"}
+        style={{width:"100%",background:S.cardIn,border:`1px solid ${S.border}`,borderRadius:6,
+         padding:"10px 12px",fontSize:12,color:S.t1,resize:"none",height:120,outline:"none",
+         lineHeight:1.7,boxSizing:"border-box",marginBottom:8}}/>
+
+       <div style={{fontSize:10,color:S.t4,marginBottom:4}}>참고 문서 <span style={{color:"#475569"}}>(선택)</span></div>
+       <textarea value={docContext} onChange={e=>setDocContext(e.target.value)}
+        placeholder="계약 조항이나 문서 내용 붙여넣기"
+        style={{width:"100%",background:S.cardIn,border:`1px solid ${S.border}`,borderRadius:6,
+         padding:"10px 12px",fontSize:11,color:S.t1,resize:"none",height:60,outline:"none",
+         lineHeight:1.7,boxSizing:"border-box",marginBottom:8}}/>
+
+       <div style={{marginBottom:10}}>
+        <div style={{fontSize:10,color:S.t4,marginBottom:5}}>제안서 파일 <span style={{color:"#475569"}}>(PDF · TXT · MD)</span></div>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+         <label style={{padding:"6px 10px",background:S.cardIn,border:`1px solid ${S.border}`,borderRadius:5,
+          fontSize:11,color:S.t3,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0,transition:"all .15s"}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor="#475569";e.currentTarget.style.color=S.t1;}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor=S.border;e.currentTarget.style.color=S.t3;}}>
+          📎 파일
+          <input ref={fileRef} type="file" accept=".pdf,.txt,.md" style={{display:"none"}} onChange={handleFileUpload}/>
+         </label>
+         {uploadedFile ? (
+          <div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 8px",
+           background:"#0d2d20",border:"1px solid #22c55e40",borderRadius:5,flex:1,minWidth:0}}>
+           <span style={{fontSize:10,color:"#86efac",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>
+            📄 {uploadedFile.name}
+           </span>
+           <button onClick={()=>setUploadedFile(null)}
+            style={{background:"none",border:"none",cursor:"pointer",color:S.t4,fontSize:11,padding:0,flexShrink:0}}
+            onMouseEnter={e=>e.currentTarget.style.color="#f87171"}
+            onMouseLeave={e=>e.currentTarget.style.color=S.t4}>✕</button>
+          </div>
+         ) : (
+          <span style={{fontSize:10,color:"#334155",lineHeight:1.5}}>PDF 업로드 시 AI가 직접 읽습니다</span>
+         )}
+        </div>
+       </div>
+
+       <div style={{display:"flex",gap:8}}>
+        <button onClick={analyze} disabled={!situation.trim()||loading}
+         style={{flex:1,padding:"9px 0",fontFamily:S.font,
+          background:situation.trim()&&!loading?"#1d4ed8":"#1e293b",
+          border:`1px solid ${situation.trim()&&!loading?"#3b82f660":"#334155"}`,
+          borderRadius:5,fontSize:12,fontWeight:600,
+          color:situation.trim()&&!loading?"#93c5fd":"#475569",
+          cursor:situation.trim()&&!loading?"pointer":"default",transition:"all 0.15s"}}>
+         {loading?"분석 중...":"법률 분석"}
+        </button>
+        {loading && (
+         <button onClick={()=>{if(abortRef.current)abortRef.current.abort();}}
+          style={{padding:"9px 10px",background:"transparent",border:"1px solid #475569",borderRadius:5,
+           fontSize:11,color:S.t4,cursor:"pointer",whiteSpace:"nowrap",fontFamily:S.font}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor="#ef4444";e.currentTarget.style.color="#f87171";}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor="#475569";e.currentTarget.style.color=S.t4;}}>
+          ✕
+         </button>
+        )}
+       </div>
+      </div>
+     )}
+
+     {/* 히스토리 탭 */}
+     {leftTab==="history" && (
+      <div style={{padding:"12px 14px"}}>
+       {legalHistory.length===0 ? (
+        <div style={{fontSize:11,color:S.t4,textAlign:"center",marginTop:24}}>분석 히스토리 없음</div>
+       ) : <>
+        <div style={{fontSize:10,fontWeight:600,color:S.t4,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:8}}>
+         History ({legalHistory.length})
+        </div>
+        {legalHistory.map(h=>{
+         const rcolor = LEGAL_RISK_COLOR[h.result?.risk_level]||"#94a3b8";
+         return <div key={h.id}
+          style={{padding:"9px 10px",borderRadius:6,marginBottom:5,cursor:"pointer",transition:"all 0.1s",
+           border:`1px solid ${activeId===h.id?rcolor+"55":"#334155"}`,
+           background:activeId===h.id?rcolor+"0c":"#1e293b",display:"flex",flexDirection:"column",gap:4}}
+          onClick={()=>{loadEntry(h);setLeftTab("review");}}>
+          <div style={{display:"flex",alignItems:"center",gap:5}}>
+           <div style={{width:5,height:5,borderRadius:"50%",background:rcolor,flexShrink:0}}/>
+           <span style={{fontSize:10,color:rcolor,fontWeight:700}}>{h.result?.risk_level||"?"}</span>
+           <span style={{fontSize:10,color:S.t4,marginLeft:"auto"}}>{h.ts}</span>
+           <button onClick={e=>{e.stopPropagation();deleteEntry(h.id);}}
+            style={{background:"none",border:"none",cursor:"pointer",color:S.t4,fontSize:12,padding:"0 2px"}}
+            onMouseEnter={e=>e.currentTarget.style.color="#f87171"}
+            onMouseLeave={e=>e.currentTarget.style.color=S.t4}>✕</button>
+          </div>
+          <div style={{fontSize:10,color:"#60a5fa"}}>{h.clientName||"의뢰인"} vs {h.opponentName||"상대방"}</div>
+          <div style={{fontSize:11,color:S.t3,lineHeight:1.5}}>{h.query.length>45?h.query.slice(0,45)+"…":h.query}</div>
+         </div>;
+        })}
+       </>}
+      </div>
+     )}
+    </div>
+
+    {/* ── 추가검토 (LLM 채팅, 항상 하단 고정) ── */}
+    <div style={{flexShrink:0,height:230,borderTop:`1px solid ${S.border}`,display:"flex",flexDirection:"column",background:S.bg}}>
+     {/* 헤더 */}
+     <div style={{padding:"7px 14px",borderBottom:`1px solid ${S.border}`,display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+      <span style={{fontSize:10,fontWeight:700,color:"#fbbf24",letterSpacing:"0.1em",textTransform:"uppercase"}}>💬 추가검토</span>
+      {result && <span style={{fontSize:9,color:S.t4,marginLeft:2}}>현재 분석 결과 기반 질의</span>}
+      {chatMsgs.length>0 && (
+       <button onClick={()=>setChatMsgs([])}
+        style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:S.t4,fontSize:10,padding:0}}
+        onMouseEnter={e=>e.currentTarget.style.color="#f87171"}
+        onMouseLeave={e=>e.currentTarget.style.color=S.t4}>초기화</button>
       )}
      </div>
+
+     {/* 메시지 영역 */}
+     <div style={{flex:1,overflowY:"auto",padding:"8px 12px",display:"flex",flexDirection:"column",gap:7,minHeight:0}}>
+      {chatMsgs.length===0 && !chatLoading && (
+       <div style={{fontSize:10,color:"#334155",textAlign:"center",marginTop:12,lineHeight:1.8}}>
+        {result?"분석 결과에 대해 추가 질문하세요":"분석 후 추가 질문이 가능합니다"}
+        {result && <><br/><span style={{color:S.t4,fontSize:9}}>예: 이 계약에서 가장 먼저 협상해야 할 조항은?</span></>}
+       </div>
+      )}
+      {chatMsgs.map((m,i)=>(
+       <div key={i} style={{display:"flex",flexDirection:"column",alignItems:m.role==="user"?"flex-end":"flex-start"}}>
+        <div style={{
+         maxWidth:"88%",padding:"7px 10px",borderRadius:m.role==="user"?"10px 10px 2px 10px":"10px 10px 10px 2px",
+         background:m.role==="user"?"#1d4ed820":"#1e293b",
+         border:`1px solid ${m.role==="user"?"#3b82f630":"#334155"}`,
+         fontSize:11,color:m.role==="user"?"#93c5fd":S.t2,lineHeight:1.65,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>
+         {m.content}
+        </div>
+       </div>
+      ))}
+      {chatLoading && (
+       <div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 2px"}}>
+        {[0,1,2].map(i=><div key={i} style={{width:5,height:5,borderRadius:"50%",background:"#60a5fa",
+         animation:"bounce 0.7s ease-in-out infinite",animationDelay:`${i*0.15}s`}}/>)}
+       </div>
+      )}
+      <div ref={chatEndRef}/>
+     </div>
+
+     {/* 입력 영역 */}
+     <div style={{padding:"7px 10px",borderTop:`1px solid ${S.border}`,display:"flex",gap:6,alignItems:"flex-end",flexShrink:0}}>
+      <textarea
+       value={chatInput}
+       onChange={e=>setChatInput(e.target.value)}
+       onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendChat();}}}
+       placeholder="추가 질문 입력 (Enter 전송, Shift+Enter 줄바꿈)"
+       rows={2}
+       style={{flex:1,background:S.cardIn,border:`1px solid ${S.border}`,borderRadius:6,
+        padding:"6px 9px",fontSize:11,color:S.t1,outline:"none",resize:"none",
+        lineHeight:1.6,fontFamily:S.font,boxSizing:"border-box"}}/>
+      <button onClick={sendChat} disabled={!chatInput.trim()||chatLoading}
+       style={{padding:"6px 11px",borderRadius:6,border:"none",fontFamily:S.font,fontSize:11,fontWeight:600,
+        background:chatInput.trim()&&!chatLoading?"#1d4ed8":"#1e293b",
+        color:chatInput.trim()&&!chatLoading?"#93c5fd":"#475569",
+        cursor:chatInput.trim()&&!chatLoading?"pointer":"default",flexShrink:0,height:52}}>
+       {chatLoading?"…":"전송"}
+      </button>
+     </div>
     </div>
 
-    {/* 히스토리 */}
-    <div style={{flex:1,overflowY:"auto",padding:"12px 16px"}}>
-     {legalHistory.length===0 ? (
-      <div style={{fontSize:11,color:S.t4,textAlign:"center",marginTop:20}}>분석 히스토리 없음</div>
-     ) : <>
-      <div style={{fontSize:10,fontWeight:600,color:S.t4,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:8}}>
-       History ({legalHistory.length})
-      </div>
-      {legalHistory.map(h=>{
-       const rcolor = LEGAL_RISK_COLOR[h.result?.risk_level]||"#94a3b8";
-       return <div key={h.id}
-        style={{padding:"9px 10px",borderRadius:6,marginBottom:5,cursor:"pointer",transition:"all 0.1s",
-         border:`1px solid ${activeId===h.id?rcolor+"55":"#334155"}`,
-         background:activeId===h.id?rcolor+"0c":"#1e293b",display:"flex",flexDirection:"column",gap:4}}
-        onClick={()=>loadEntry(h)}>
-        <div style={{display:"flex",alignItems:"center",gap:5}}>
-         <div style={{width:5,height:5,borderRadius:"50%",background:rcolor,flexShrink:0}}/>
-         <span style={{fontSize:10,color:rcolor,fontWeight:700}}>{h.result?.risk_level||"?"}</span>
-         <span style={{fontSize:10,color:S.t4,marginLeft:"auto"}}>{h.ts}</span>
-         <button onClick={e=>{e.stopPropagation();deleteEntry(h.id);}}
-          style={{background:"none",border:"none",cursor:"pointer",color:S.t4,fontSize:12,padding:"0 2px"}}
-          onMouseEnter={e=>e.currentTarget.style.color="#f87171"}
-          onMouseLeave={e=>e.currentTarget.style.color=S.t4}>✕</button>
-        </div>
-        <div style={{fontSize:10,color:"#60a5fa"}}>{h.clientName||"의뢰인"} vs {h.opponentName||"상대방"}</div>
-        <div style={{fontSize:11,color:S.t3,lineHeight:1.5}}>{h.query.length>45?h.query.slice(0,45)+"…":h.query}</div>
-       </div>;
-      })}
-     </>}
-    </div>
    </div>
 
    {/* 오른쪽 결과 */}
