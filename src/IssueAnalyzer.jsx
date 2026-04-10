@@ -113,9 +113,75 @@ const ISSUE_TEMPLATES = [
  },
 ];
 
+// ── 홈 화면 ────────────────────────────────────────────────────────────────────
+function HomeScreen({ onSelect }) {
+ return (
+  <div style={{fontFamily:"system-ui,-apple-system,'Segoe UI',sans-serif",background:"#020617",
+   height:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+   color:"#f1f5f9",padding:32}}>
+   <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+    <div style={{width:40,height:40,borderRadius:10,background:"linear-gradient(135deg,#1d4ed8,#0ea5e9)",
+     display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,fontWeight:800,color:"#fff",letterSpacing:"-0.04em"}}>CI</div>
+    <div>
+     <div style={{fontSize:16,fontWeight:700,letterSpacing:"0.1em",color:"#cbd5e1"}}>CONTRACT INTELLIGENCE</div>
+     <div style={{fontSize:11,color:"#475569",letterSpacing:"0.04em",marginTop:1}}>무엇을 검토하시겠습니까?</div>
+    </div>
+   </div>
+   <div style={{width:480,height:1,background:"#1e293b",marginBottom:40}}/>
+   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,width:"100%",maxWidth:780}}>
+    <button onClick={()=>onSelect("kt")}
+     style={{background:"#0f172a",border:"1px solid #1e40af",borderRadius:14,padding:"32px 28px",
+      textAlign:"left",cursor:"pointer",fontFamily:"inherit",transition:"all 0.2s",
+      display:"flex",flexDirection:"column",gap:14}}
+     onMouseEnter={e=>{e.currentTarget.style.borderColor="#3b82f6";e.currentTarget.style.background="#0d1f3c";e.currentTarget.style.boxShadow="0 0 0 1px #3b82f640, 0 8px 32px rgba(59,130,246,0.15)";}}
+     onMouseLeave={e=>{e.currentTarget.style.borderColor="#1e40af";e.currentTarget.style.background="#0f172a";e.currentTarget.style.boxShadow="none";}}>
+     <div style={{display:"flex",alignItems:"center",gap:10}}>
+      <div style={{width:36,height:36,borderRadius:8,background:"rgba(59,130,246,0.15)",border:"1px solid #1d4ed860",
+       display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>📋</div>
+      <div>
+       <div style={{fontSize:15,fontWeight:700,color:"#e2e8f0"}}>KT × Palantir 계약 검토</div>
+       <div style={{fontSize:11,color:"#3b82f6",marginTop:2}}>기존 계약서 기반 분석</div>
+      </div>
+     </div>
+     <div style={{fontSize:12,color:"#64748b",lineHeight:1.75}}>KT와 Palantir Korea LLC 간 계약의<br/>조항·이슈·리스크를 심층 분석합니다.</div>
+     <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+      {["조항검토","이슈분석","히스토리","문서관리","변경이력","대시보드"].map(t=>(
+       <span key={t} style={{padding:"2px 9px",borderRadius:10,background:"rgba(59,130,246,0.1)",border:"1px solid #1d4ed840",fontSize:10,color:"#60a5fa"}}>{t}</span>
+      ))}
+     </div>
+     <div style={{marginTop:4,fontSize:12,fontWeight:600,color:"#60a5fa",display:"flex",alignItems:"center",gap:5}}>선택 <span style={{fontSize:14}}>→</span></div>
+    </button>
+    <button onClick={()=>onSelect("proposal")}
+     style={{background:"#0f172a",border:"1px solid #065f46",borderRadius:14,padding:"32px 28px",
+      textAlign:"left",cursor:"pointer",fontFamily:"inherit",transition:"all 0.2s",
+      display:"flex",flexDirection:"column",gap:14}}
+     onMouseEnter={e=>{e.currentTarget.style.borderColor="#10b981";e.currentTarget.style.background="#051f16";e.currentTarget.style.boxShadow="0 0 0 1px #10b98140, 0 8px 32px rgba(16,185,129,0.15)";}}
+     onMouseLeave={e=>{e.currentTarget.style.borderColor="#065f46";e.currentTarget.style.background="#0f172a";e.currentTarget.style.boxShadow="none";}}>
+     <div style={{display:"flex",alignItems:"center",gap:10}}>
+      <div style={{width:36,height:36,borderRadius:8,background:"rgba(16,185,129,0.12)",border:"1px solid #05966940",
+       display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>⚖</div>
+      <div>
+       <div style={{fontSize:15,fontWeight:700,color:"#e2e8f0"}}>제안 검토</div>
+       <div style={{fontSize:11,color:"#10b981",marginTop:2}}>범용 법률·사업·기술 통합 분석</div>
+      </div>
+     </div>
+     <div style={{fontSize:12,color:"#64748b",lineHeight:1.75}}>KT/Palantir 계약과 무관한 새 안건에 대해<br/>4관점(법적·사업·기술·파트너십) 통합 검토</div>
+     <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+      {["4관점 분석","수용/거부 판단","리스크 카드","Redline","C-Level 요약","PDF 업로드"].map(t=>(
+       <span key={t} style={{padding:"2px 9px",borderRadius:10,background:"rgba(16,185,129,0.08)",border:"1px solid #05966940",fontSize:10,color:"#34d399"}}>{t}</span>
+      ))}
+     </div>
+     <div style={{marginTop:4,fontSize:12,fontWeight:600,color:"#34d399",display:"flex",alignItems:"center",gap:5}}>선택 <span style={{fontSize:14}}>→</span></div>
+    </button>
+   </div>
+  </div>
+ );
+}
+
 export default function IssueAnalyzer() {
  const [sessionCode, setSessionCode] = useState(SESSION_ID);
  const [sessionReady, setSessionReady] = useState(!!SESSION_ID);
+ const [appMode, setAppMode] = useState(null); // null=홈, "kt"=KT계약, "proposal"=제안검토
  const [appTab, setAppTab] = useState("review");
  const [globalViewingClause, setGlobalViewingClause] = useState(null);
  const [mode, setMode] = useState("auto");
@@ -510,52 +576,66 @@ export default function IssueAnalyzer() {
   );
  }
 
+ if (!appMode) return <HomeScreen onSelect={setAppMode}/>;
+
  return (
  <div style={{fontFamily:"system-ui,-apple-system,'Segoe UI',sans-serif",background:"#020617",height:"100vh",display:"flex",flexDirection:"column",color:"#f1f5f9",overflow:"hidden"}}>
 
  {/* ── 헤더 ── */}
  <div style={{background:"#0f172a",borderBottom:"1px solid #334155",padding:"0 20px",display:"flex",alignItems:"center",gap:16,height:50,flexShrink:0,boxShadow:"0 1px 8px rgba(0,0,0,0.4)"}}>
-  {/* 로고 (홈 버튼) */}
-  <button
-   onClick={()=>setAppTab("dashboard")}
+
+  <button onClick={()=>setAppMode(null)}
    style={{display:"flex",alignItems:"center",gap:10,flexShrink:0,background:"transparent",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit",textAlign:"left"}}
-   title="대시보드로 이동"
-  >
+   title="홈으로 돌아가기">
    <div style={{width:26,height:26,borderRadius:6,background:"linear-gradient(135deg,#1d4ed8,#0ea5e9)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:"#fff",letterSpacing:"-0.04em"}}>CI</div>
    <div>
     <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.1em",color:"#cbd5e1"}}>CONTRACT INTELLIGENCE</div>
-    <div style={{fontSize:11,color:"#475569",letterSpacing:"0.04em",marginTop:1}}>KT × Palantir Korea LLC</div>
+    <div style={{fontSize:11,color:appMode==="kt"?"#3b82f6":"#10b981",letterSpacing:"0.04em",marginTop:1}}>
+     {appMode==="kt"?"KT × Palantir 계약 검토":"제안 검토"}
+    </div>
    </div>
   </button>
+
   <div style={{width:1,height:24,background:"#334155",flexShrink:0}}/>
-  {/* 탭 */}
-  <div style={{display:"flex",gap:1}}>
-   {[["review","조항검토"],["analyze","이슈분석"],["legal","법률검토"],["history","히스토리"],["docs","문서관리"],["timeline","변경이력"],["dashboard","대시보드"]].map(([tab,label])=>(
-    <button key={tab} onClick={()=>setAppTab(tab)}
-     style={{padding:"6px 14px",borderRadius:4,border:"none",cursor:"pointer",
-      fontSize:12,fontWeight:appTab===tab?600:400,fontFamily:"inherit",
-      transition:"all 0.15s",position:"relative",
-      background:appTab===tab?"#1e293b":"transparent",
-      color:appTab===tab?"#e2e8f0":"#64748b",
-      borderBottom:appTab===tab?"2px solid #60a5fa":"2px solid transparent"}}>
-     {label}
-    </button>
-   ))}
-  </div>
-  {/* 우측 배지 */}
-  <div style={{display:"flex",gap:6,marginLeft:"auto",alignItems:"center"}}>
-   <div style={{display:"flex",alignItems:"center",gap:6}}>
-    <span style={{fontSize:10,color:"#94a3b8",background:"#1e293b",padding:"2px 8px",borderRadius:4,border:"1px solid #334155"}}>
-     세션: {SESSION_ID||"-"}
-    </span>
-    <button onClick={handleSessionChange}
-     style={{padding:"2px 8px",borderRadius:4,border:"1px solid #334155",background:"#1e293b",color:"#94a3b8",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>
-     변경
-    </button>
+
+  {appMode==="kt" && (
+   <div style={{display:"flex",gap:1}}>
+    {[["review","조항검토"],["analyze","이슈분석"],["history","히스토리"],["docs","문서관리"],["timeline","변경이력"],["dashboard","대시보드"]].map(([tab,label])=>(
+     <button key={tab} onClick={()=>setAppTab(tab)}
+      style={{padding:"6px 14px",borderRadius:4,border:"none",cursor:"pointer",
+       fontSize:12,fontWeight:appTab===tab?600:400,fontFamily:"inherit",
+       transition:"all 0.15s",
+       background:appTab===tab?"#1e293b":"transparent",
+       color:appTab===tab?"#e2e8f0":"#64748b",
+       borderBottom:appTab===tab?"2px solid #60a5fa":"2px solid transparent"}}>
+      {label}
+     </button>
+    ))}
    </div>
-   {(appTab==="analyze"||appTab==="review") && <>
+  )}
+
+  {appMode==="proposal" && (
+   <div style={{display:"flex",alignItems:"center",gap:8}}>
+    <span style={{fontSize:12,color:"#10b981",fontWeight:600}}>⚖ 4관점 통합 제안 검토</span>
+    <span style={{fontSize:10,color:"#334155"}}>법적 · 사업 · 기술 · 파트너십</span>
+   </div>
+  )}
+
+  <div style={{display:"flex",gap:6,marginLeft:"auto",alignItems:"center"}}>
+   {appMode==="kt" && (
+    <div style={{display:"flex",alignItems:"center",gap:6}}>
+     <span style={{fontSize:10,color:"#94a3b8",background:"#1e293b",padding:"2px 8px",borderRadius:4,border:"1px solid #334155"}}>
+      세션: {SESSION_ID||"-"}
+     </span>
+     <button onClick={handleSessionChange}
+      style={{padding:"2px 8px",borderRadius:4,border:"1px solid #334155",background:"#1e293b",color:"#94a3b8",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>
+      변경
+     </button>
+    </div>
+   )}
+   {appMode==="kt" && (appTab==="analyze"||appTab==="review") && <>
     <div style={{width:1,height:18,background:"#334155"}}/>
-<div style={{display:"flex",background:"#1e293b",borderRadius:5,padding:2,border:"1px solid #334155"}}>
+    <div style={{display:"flex",background:"#1e293b",borderRadius:5,padding:2,border:"1px solid #334155"}}>
      {[["auto","자동"],["basic","기본"],["extended","확장"]].map(([m,label])=>(
       <button key={m} onClick={()=>setMode(m)}
        title={m==="auto"?"이슈 내용을 분석해 자동으로 기본/확장 결정":m==="extended"?"내규·법령 포함 확장 분석":"계약 문서 기반 기본 분석"}
@@ -565,6 +645,13 @@ export default function IssueAnalyzer() {
      ))}
     </div>
    </>}
+   <button onClick={()=>setAppMode(null)}
+    style={{padding:"3px 11px",borderRadius:4,border:"1px solid #334155",background:"transparent",
+     color:"#475569",fontSize:10,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4}}
+    onMouseEnter={e=>{e.currentTarget.style.borderColor="#64748b";e.currentTarget.style.color="#94a3b8";}}
+    onMouseLeave={e=>{e.currentTarget.style.borderColor="#334155";e.currentTarget.style.color="#475569";}}>
+    ← 홈
+   </button>
   </div>
  </div>
 
@@ -572,7 +659,9 @@ export default function IssueAnalyzer() {
  {/* ── 탭 콘텐츠 ── */}
  <div style={{flex:1,overflow:"hidden"}}>
 
-  {appTab==="docs" && (
+  {appMode==="proposal" && <GeneralLegalReviewTab/>}
+
+  {appMode==="kt" && appTab==="docs" && (
    <DocumentManagerTab
     onKBUpdated={handleKBUpdated}
     onOpenClause={setGlobalViewingClause}
@@ -583,13 +672,12 @@ export default function IssueAnalyzer() {
    />
   )}
 
-  {appTab==="dashboard" && <ContractDashboard onOpenClause={setGlobalViewingClause}/>}
- {appTab==="review" && <ErrorBoundary><ClauseReviewTab clauses={CONTRACT_KB.clauses} conflicts={CONTRACT_KB.conflicts} amendments={amendments} onOpenClause={setGlobalViewingClause} onSaveSession={saveClauseSession} mode={mode}/></ErrorBoundary>}
-  {appTab==="timeline" && <ClauseTimelineTab onOpenClause={setGlobalViewingClause}/>}
-  {appTab==="hurdle" && <HurdleTracker/>}
-  {appTab==="legal" && <GeneralLegalReviewTab/>}
+  {appMode==="kt" && appTab==="dashboard" && <ContractDashboard onOpenClause={setGlobalViewingClause}/>}
+  {appMode==="kt" && appTab==="review" && <ErrorBoundary><ClauseReviewTab clauses={CONTRACT_KB.clauses} conflicts={CONTRACT_KB.conflicts} amendments={amendments} onOpenClause={setGlobalViewingClause} onSaveSession={saveClauseSession} mode={mode}/></ErrorBoundary>}
+  {appMode==="kt" && appTab==="timeline" && <ClauseTimelineTab onOpenClause={setGlobalViewingClause}/>}
+  {appMode==="kt" && appTab==="hurdle" && <HurdleTracker/>}
 
-  {appTab==="history" && (
+  {appMode==="kt" && appTab==="history" && (
    <HistoryTab
     history={history}
     onSelect={h=>{ setActiveHistory(h.id); setAppTab("analyze"); }}
@@ -605,7 +693,7 @@ export default function IssueAnalyzer() {
   )}
 
   {/* ── 이슈 분석 탭 ── */}
-  {appTab==="analyze" && (
+  {appMode==="kt" && appTab==="analyze" && (
    <div style={{display:"grid",gridTemplateColumns:"280px 1fr",height:"100%"}}>
 
     {/* 왼쪽 사이드바 */}
