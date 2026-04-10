@@ -8698,6 +8698,126 @@ ${situation}
 }`;
 }
 
+// ── 멀티 페르소나 프롬프트 빌더 ───────────────────────────────────────────
+const PERSONA_DEFS = [
+ {
+  key: "legal",
+  label: "법무",
+  color: "#60a5fa",
+  bg: "rgba(96,165,250,0.12)",
+  border: "#3b82f630",
+  prompt: (client, opponent, doc) =>
+   `당신은 ${client}의 사내 법무 전문가입니다. 계약서 및 상황을 검토하여 법적 리스크를 식별합니다.
+
+집중 영역: 준거법·관할, 계약 위반 요건·치유 기간, 면책·손해배상 한도, 편의해지 조항, 계약 종료 후 생존 조항, 비대칭 의무 조항.
+
+분석 지침: ${client}에 불리한 비대칭 조항 우선 식별. 조항 원문 근거로 구체적 리스크 설명. 이슈가 없으면 [] 반환.
+
+출력 형식 (JSON 배열만, 다른 텍스트 없이):
+[{"persona":"legal","category":"GOVERNANCE_LAW","risk_level":"HIGH|MEDIUM|LOW","title":"이슈 제목","description":"법적 관점 이슈 설명","relevant_clause":"조항 원문 발췌(100자 이내)","clause_reference":"조항 번호","impact":"${client}에 미치는 법적 영향","recommended_action":"법적 대응 방안"}]
+
+【당사자】의뢰인: ${client} / 상대방: ${opponent}
+${doc ? "【참고 문서】\n"+doc : ""}`,
+ },
+ {
+  key: "financial",
+  label: "재무",
+  color: "#34d399",
+  bg: "rgba(52,211,153,0.12)",
+  border: "#10b98130",
+  prompt: (client, opponent, doc) =>
+   `당신은 ${client}의 재무 전문가입니다. 계약서의 재무 리스크를 식별합니다.
+
+집중 영역: 금액 약정·Shortfall 조건, 조기 해지 위약금 구조, 지급 조건·연체 리스크, 크레딧·인센티브 달성 요건, 재무 보고 의무.
+
+분석 지침: 금액·기간·달성 조건 명시 조항 우선 식별. 미달성 시 금전적 손실 수치 명시. 이슈가 없으면 [] 반환.
+
+출력 형식 (JSON 배열만):
+[{"persona":"financial","category":"FINANCIAL_OBLIGATION","risk_level":"HIGH|MEDIUM|LOW","title":"이슈 제목","description":"재무 관점 이슈 설명","relevant_clause":"조항 원문 발췌(100자 이내)","clause_reference":"조항 번호","impact":"${client}에 미치는 재무적 영향(금액 명시)","recommended_action":"재무적 대응 방안"}]
+
+【당사자】의뢰인: ${client} / 상대방: ${opponent}
+${doc ? "【참고 문서】\n"+doc : ""}`,
+ },
+ {
+  key: "strategy",
+  label: "전략",
+  color: "#fb923c",
+  bg: "rgba(251,146,60,0.12)",
+  border: "#f9731630",
+  prompt: (client, opponent, doc) =>
+   `당신은 ${client}의 전략 전문가입니다. 계약서의 전략적 리스크를 식별합니다.
+
+집중 영역: 협상력 불균형·비대칭성, 시장 자율성 제한 조항(독점·우선권), 장기 전략 목표와의 정합성, 타 벤더 전환 제약, 교차 의존 조항.
+
+분석 지침: ${client}의 협상 레버리지를 약화시키는 구조 분석. 장기적 종속 유발 조항 식별. 이슈가 없으면 [] 반환.
+
+출력 형식 (JSON 배열만):
+[{"persona":"strategy","category":"STRATEGIC_RISK","risk_level":"HIGH|MEDIUM|LOW","title":"이슈 제목","description":"전략적 관점 이슈 설명","relevant_clause":"조항 원문 발췌(100자 이내)","clause_reference":"조항 번호","impact":"${client} 전략에 미치는 영향","recommended_action":"전략적 대응 방안"}]
+
+【당사자】의뢰인: ${client} / 상대방: ${opponent}
+${doc ? "【참고 문서】\n"+doc : ""}`,
+ },
+ {
+  key: "tech",
+  label: "기술",
+  color: "#a78bfa",
+  bg: "rgba(167,139,250,0.12)",
+  border: "#8b5cf630",
+  prompt: (client, opponent, doc) =>
+   `당신은 ${client}의 기술 전문가입니다. 계약서의 기술·IP 리스크를 식별합니다.
+
+집중 영역: 지식재산권 소유 구조(Developments·Improvements·Generic solutions), 데이터 처리·보호 범위, 기술 의존도·벤더 lock-in, SLA·가용성 보장 수준, 보안 요구사항.
+
+분석 지침: ${client} 또는 ${client} 고객이 생성한 데이터·IP 귀속 관계 명확히. 기술 전환 장벽 조항 식별. 이슈가 없으면 [] 반환.
+
+출력 형식 (JSON 배열만):
+[{"persona":"tech","category":"IP_OWNERSHIP","risk_level":"HIGH|MEDIUM|LOW","title":"이슈 제목","description":"기술 관점 이슈 설명","relevant_clause":"조항 원문 발췌(100자 이내)","clause_reference":"조항 번호","impact":"${client} 기술 역량에 미치는 영향","recommended_action":"기술적 대응 방안"}]
+
+【당사자】의뢰인: ${client} / 상대방: ${opponent}
+${doc ? "【참고 문서】\n"+doc : ""}`,
+ },
+ {
+  key: "risk",
+  label: "리스크",
+  color: "#f87171",
+  bg: "rgba(248,113,113,0.12)",
+  border: "#ef444430",
+  prompt: (client, opponent, doc) =>
+   `당신은 ${client}의 리스크 관리 전문가입니다. 계약서의 운영 리스크를 식별합니다.
+
+집중 영역: 편의해지 권한 비대칭(일방 vs 쌍방), 계약 만료·갱신 리스크, 의무 불이행 시 연쇄 영향, 감사·모니터링 조항 부담, 보험·면책 요건.
+
+분석 지침: HIGH 리스크 조기 경보 관점 우선 발굴. 단일 조항 위반이 계약 전체에 미치는 연쇄 효과 분석. ${opponent}이 일방적으로 계약을 종료·변경할 수 있는 조항 탐색. 이슈가 없으면 [] 반환.
+
+출력 형식 (JSON 배열만):
+[{"persona":"risk","category":"TERMINATION","risk_level":"HIGH|MEDIUM|LOW","title":"이슈 제목","description":"리스크 관점 이슈 설명","relevant_clause":"조항 원문 발췌(100자 이내)","clause_reference":"조항 번호","impact":"${client} 운영에 미치는 영향","recommended_action":"리스크 완화 방안"}]
+
+【당사자】의뢰인: ${client} / 상대방: ${opponent}
+${doc ? "【참고 문서】\n"+doc : ""}`,
+ },
+];
+
+function buildPersonaSynthesisPrompt(client, opponent, situation, allIssues) {
+ return `당신은 법률·재무·전략·기술·리스크 통합 수석 분석가입니다.
+아래는 5명의 전문가가 "${client} vs ${opponent}" 안건을 독립적으로 분석한 결과입니다.
+
+【안건】
+${situation}
+
+【전문가 분석 결과】
+${JSON.stringify(allIssues, null, 2)}
+
+다음을 수행하세요:
+1. 중복 이슈 통합 (같은 내용은 하나로)
+2. 충돌하는 위험 등급 조정 (보수적인 등급 채택)
+3. 전체 이슈를 HIGH → MEDIUM → LOW 순 정렬
+4. 각 이슈에 발굴한 페르소나 배열(personas) 추가
+5. ${client} 관점 Executive Summary 작성 (3~5문장, 핵심 리스크·권고사항 포함)
+
+출력 형식 (JSON만, 다른 텍스트 없이):
+{"executive_summary":"종합 평가","total_issues":0,"high_count":0,"medium_count":0,"low_count":0,"issues":[{"personas":["legal"],"category":"카테고리","risk_level":"HIGH","title":"이슈 제목","description":"통합 설명","relevant_clause":"조항 발췌","clause_reference":"조항 번호","impact":"${client} 영향","recommended_action":"권고 조치"}]}`;
+}
+
 // ── 리포트 HTML 생성 (Feature 6) ───────────────────────────────────────────
 function generateLegalReport(result, query, clientName, opponentName) {
  const client   = clientName   || "의뢰인";
@@ -9293,6 +9413,10 @@ function GeneralLegalReviewTab() {
  });
  const [activeId, setActiveId]   = useState(null);
  const [leftTab, setLeftTab]     = useState("review"); // "review" | "history"
+ const [analyzeMode, setAnalyzeMode] = useState("4view"); // "4view" | "persona"
+ const [personaResult, setPersonaResult] = useState(null);
+ const [personaProgress, setPersonaProgress] = useState([]); // 진행중인 페르소나 목록
+ const [expandedIssue, setExpandedIssue] = useState(null);
  // 추가검토 채팅
  const [chatMsgs, setChatMsgs]   = useState([]);
  const [chatInput, setChatInput] = useState("");
@@ -9363,7 +9487,7 @@ function GeneralLegalReviewTab() {
   const query = situation.trim();
   const abortCtrl = new AbortController();
   abortRef.current = abortCtrl;
-  setLoading(true); setError(null); setResult(null); setCurrentQuery(query);
+  setLoading(true); setError(null); setResult(null); setPersonaResult(null); setCurrentQuery(query);
   try {
    const body = {
     max_tokens: 8192,
@@ -9413,8 +9537,86 @@ function GeneralLegalReviewTab() {
   } finally { setLoading(false); abortRef.current = null; }
  };
 
+ // ── 멀티 페르소나 병렬 분석 ──────────────────────────────────────────────
+ const analyzeMultiPersona = async () => {
+  if (!situation.trim() || loading) return;
+  const query = situation.trim();
+  const client = clientName.trim() || "의뢰인";
+  const opponent = opponentName.trim() || "상대방";
+  const doc = docContext.trim() + (uploadedFile ? "\n[PDF 첨부됨]" : "");
+  setLoading(true); setError(null); setPersonaResult(null); setCurrentQuery(query);
+  setPersonaProgress([]); setExpandedIssue(null);
+
+  // 5개 페르소나 병렬 실행
+  const runPersona = async (def) => {
+   setPersonaProgress(p => [...p, def.key]);
+   try {
+    const body = {
+     max_tokens: 4096,
+     messages: [{ role:"user", content: def.prompt(client, opponent, doc) + "\n\n【상황/이슈】\n" + query }],
+    };
+    if (uploadedFile) body.document = { mimeType: uploadedFile.mimeType, data: uploadedFile.data };
+    const res = await fetch("/api/chat", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) });
+    const data = await res.json();
+    const text = (data.content||[]).map(c=>c.text||"").join("").trim();
+    const js = text.indexOf("["), je = text.lastIndexOf("]");
+    if (js===-1||je===-1) return [];
+    try { return JSON.parse(text.slice(js,je+1)); } catch { return []; }
+   } catch { return []; }
+  };
+
+  try {
+   const results = await Promise.all(PERSONA_DEFS.map(def => runPersona(def)));
+   const allIssues = results.flat();
+   if (allIssues.length === 0) throw new Error("5개 페르소나 분석에서 이슈를 추출하지 못했습니다.");
+
+   // 합성 호출
+   setPersonaProgress(p => [...p, "__synthesis__"]);
+   const synthRes = await fetch("/api/chat", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+     max_tokens: 8192,
+     messages: [{ role:"user", content: buildPersonaSynthesisPrompt(client, opponent, query, allIssues) }],
+    }),
+   });
+   const synthData = await synthRes.json();
+   const synthText = (synthData.content||[]).map(c=>c.text||"").join("").trim();
+   const sjs = synthText.indexOf("{"), sje = synthText.lastIndexOf("}");
+   if (sjs===-1||sje===-1) throw new Error("합성 JSON 파싱 실패");
+   let report;
+   try { report = JSON.parse(synthText.slice(sjs,sje+1)); }
+   catch(e) {
+    const fixed = synthText.slice(sjs,sje+1).replace(/,(\s*[}\]])/g,"$1");
+    report = JSON.parse(fixed);
+   }
+   // 카운트 재계산
+   const issues = report.issues || [];
+   report.high_count   = issues.filter(i=>i.risk_level==="HIGH").length;
+   report.medium_count = issues.filter(i=>i.risk_level==="MEDIUM").length;
+   report.low_count    = issues.filter(i=>i.risk_level==="LOW").length;
+   report.total_issues = issues.length;
+   setPersonaResult(report);
+
+   // 히스토리 저장 (4관점과 동일 키, mode 표시)
+   const entry = { id:Date.now(), query, clientName:client, opponentName:opponent,
+    result:{ risk_level: issues[0]?.risk_level||"MEDIUM", bottom_line: report.executive_summary, _mode:"persona" },
+    personaReport: report, mode:"persona", ts:new Date().toLocaleString("ko-KR") };
+   const nh = [entry, ...legalHistory];
+   setLegalHistory(nh); setActiveId(entry.id); saveLegalHistory(nh);
+  } catch(e) {
+   setError("페르소나 분석 오류: " + e.message);
+  } finally { setLoading(false); setPersonaProgress([]); }
+ };
+
  const loadEntry = (entry) => {
-  setResult(entry.result); setCurrentQuery(entry.query);
+  if (entry.mode === "persona" && entry.personaReport) {
+   setPersonaResult(entry.personaReport); setResult(null);
+   setAnalyzeMode("persona");
+  } else {
+   setResult(entry.result); setPersonaResult(null);
+   setAnalyzeMode("4view");
+  }
+  setCurrentQuery(entry.query);
   setClientName(entry.clientName||""); setOpponentName(entry.opponentName||""); setActiveId(entry.id);
  };
  const deleteEntry = (id) => {
@@ -9505,15 +9707,33 @@ function GeneralLegalReviewTab() {
         </div>
        </div>
 
+       {/* 모드 토글 */}
+       <div style={{display:"flex",background:S.cardIn,borderRadius:5,padding:2,border:`1px solid ${S.border}`,marginBottom:8}}>
+        {[["4view","4관점 분석"],["persona","5 페르소나"]].map(([m,lbl])=>(
+         <button key={m} onClick={()=>setAnalyzeMode(m)}
+          style={{flex:1,padding:"5px 0",border:"none",borderRadius:4,cursor:"pointer",fontFamily:S.font,
+           fontSize:11,fontWeight:600,transition:"all .15s",
+           background:analyzeMode===m?(m==="persona"?"#4c1d95":"#1e3a5f"):"transparent",
+           color:analyzeMode===m?(m==="persona"?"#c084fc":"#60a5fa"):"#64748b"}}>
+          {lbl}
+         </button>
+        ))}
+       </div>
        <div style={{display:"flex",gap:8}}>
-        <button onClick={analyze} disabled={!situation.trim()||loading}
+        <button
+         onClick={analyzeMode==="persona" ? analyzeMultiPersona : analyze}
+         disabled={!situation.trim()||loading}
          style={{flex:1,padding:"9px 0",fontFamily:S.font,
-          background:situation.trim()&&!loading?"#1d4ed8":"#1e293b",
-          border:`1px solid ${situation.trim()&&!loading?"#3b82f660":"#334155"}`,
+          background:situation.trim()&&!loading?(analyzeMode==="persona"?"#4c1d95":"#1d4ed8"):"#1e293b",
+          border:`1px solid ${situation.trim()&&!loading?(analyzeMode==="persona"?"#7c3aed60":"#3b82f660"):"#334155"}`,
           borderRadius:5,fontSize:12,fontWeight:600,
-          color:situation.trim()&&!loading?"#93c5fd":"#475569",
+          color:situation.trim()&&!loading?(analyzeMode==="persona"?"#c084fc":"#93c5fd"):"#475569",
           cursor:situation.trim()&&!loading?"pointer":"default",transition:"all 0.15s"}}>
-         {loading?"분석 중...":"법률 분석"}
+         {loading
+          ? (analyzeMode==="persona"
+             ? personaProgress.length===6?"합성 중…":`분석 중… (${personaProgress.length}/5)`
+             : "분석 중…")
+          : analyzeMode==="persona" ? "페르소나 분석" : "법률 분석"}
         </button>
         {loading && (
          <button onClick={()=>{if(abortRef.current)abortRef.current.abort();}}
@@ -9629,7 +9849,36 @@ function GeneralLegalReviewTab() {
 
    {/* 오른쪽 결과 */}
    <div style={{overflowY:"auto",padding:24,background:S.bg}}>
-    {loading && (
+    {/* 로딩 */}
+    {loading && analyzeMode==="persona" && (
+     <div style={{background:S.card,border:`1px solid #7c3aed30`,borderRadius:10,padding:40,textAlign:"center"}}>
+      <div style={{fontSize:13,color:"#c084fc",letterSpacing:"0.1em",marginBottom:12}}>5 PERSONAS ANALYZING...</div>
+      <div style={{display:"flex",justifyContent:"center",gap:10,flexWrap:"wrap",marginBottom:16}}>
+       {PERSONA_DEFS.map(def=>{
+        const done = personaProgress.includes(def.key);
+        return (
+         <div key={def.key} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",
+          borderRadius:5,border:`1px solid ${done?def.border:"#334155"}`,
+          background:done?def.bg:"transparent",transition:"all .3s"}}>
+          <div style={{width:6,height:6,borderRadius:"50%",background:done?def.color:"#334155",
+           ...(done?{}:{animation:"bounce 0.8s ease-in-out infinite"})}}/>
+          <span style={{fontSize:11,color:done?def.color:S.t4}}>{def.label}</span>
+         </div>
+        );
+       })}
+       <div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",
+        borderRadius:5,border:`1px solid ${personaProgress.includes("__synthesis__")?"#7c3aed30":"#334155"}`,
+        background:personaProgress.includes("__synthesis__")?"rgba(124,58,237,0.1)":"transparent",transition:"all .3s"}}>
+        <span style={{fontSize:11,color:personaProgress.includes("__synthesis__")?"#a78bfa":S.t4}}>합성</span>
+       </div>
+      </div>
+      <div style={{display:"flex",justifyContent:"center",gap:6}}>
+       {[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:"#7c3aed",
+        animation:"bounce 0.8s ease-in-out infinite",animationDelay:`${i*0.2}s`}}/>)}
+      </div>
+     </div>
+    )}
+    {loading && analyzeMode==="4view" && (
      <div style={{background:S.card,border:`1px solid ${S.border}`,borderRadius:10,padding:40,textAlign:"center"}}>
       <div style={{fontSize:13,color:S.t4,letterSpacing:"0.1em"}}>ANALYZING...</div>
       <div style={{fontSize:11,color:"#475569",marginTop:4}}>법적·사업·기술·파트너십 4관점 분석 중</div>
@@ -9642,7 +9891,9 @@ function GeneralLegalReviewTab() {
     {error && !loading && (
      <div style={{background:"#1c0808",border:"1px solid #ef444430",borderRadius:8,padding:"12px 16px",fontSize:12,color:"#f87171"}}>{error}</div>
     )}
-    {result && !loading && (
+
+    {/* 4관점 결과 */}
+    {result && !loading && !personaResult && (
      <div>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
        <span style={{fontSize:10,color:S.t4,letterSpacing:"0.08em",textTransform:"uppercase"}}>이슈</span>
@@ -9652,13 +9903,112 @@ function GeneralLegalReviewTab() {
       <LegalReviewResult result={result} clientName={clientName} opponentName={opponentName} currentQuery={currentQuery}/>
      </div>
     )}
-    {!result && !loading && !error && (
+
+    {/* 페르소나 결과 */}
+    {personaResult && !loading && (
+     <div>
+      {/* 헤더 */}
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:18,gap:12}}>
+       <div>
+        <div style={{fontSize:11,color:"#a78bfa",fontWeight:700,letterSpacing:"0.08em",marginBottom:4}}>5 PERSONA ANALYSIS</div>
+        <div style={{fontSize:12,color:S.t3,background:S.card,border:`1px solid #7c3aed30`,borderRadius:5,
+         padding:"4px 10px",lineHeight:1.6,wordBreak:"break-all"}}>{currentQuery}</div>
+       </div>
+       <div style={{display:"flex",gap:6,flexShrink:0}}>
+        {[["HIGH","#ef4444",personaResult.high_count],["MED","#f59e0b",personaResult.medium_count],["LOW","#10b981",personaResult.low_count]].map(([lv,color,cnt])=>(
+         <div key={lv} style={{textAlign:"center",background:S.card,border:`1px solid ${color}30`,borderRadius:7,padding:"6px 10px",minWidth:40}}>
+          <div style={{fontSize:16,fontWeight:800,color}}>{cnt??0}</div>
+          <div style={{fontSize:9,color:S.t4}}>{lv}</div>
+         </div>
+        ))}
+       </div>
+      </div>
+
+      {/* Executive Summary */}
+      {personaResult.executive_summary && (
+       <div style={{background:"#0d1728",border:"1px solid #1d4ed840",borderRadius:10,padding:"14px 18px",marginBottom:18}}>
+        <div style={{fontSize:10,fontWeight:700,color:"#60a5fa",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:8}}>Executive Summary</div>
+        <div style={{fontSize:13,color:S.t2,lineHeight:1.9}}>{personaResult.executive_summary}</div>
+       </div>
+      )}
+
+      {/* 페르소나 범례 */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+       {PERSONA_DEFS.map(def=>(
+        <div key={def.key} style={{display:"flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:4,background:def.bg,border:`1px solid ${def.border}`}}>
+         <div style={{width:5,height:5,borderRadius:"50%",background:def.color}}/>
+         <span style={{fontSize:10,color:def.color,fontWeight:600}}>{def.label}</span>
+        </div>
+       ))}
+      </div>
+
+      {/* 이슈 목록 */}
+      <div style={{fontSize:10,fontWeight:700,color:S.t4,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:10}}>
+       Issues ({(personaResult.issues||[]).length})
+      </div>
+      {(personaResult.issues||[]).map((issue,idx)=>{
+       const RC_MAP = {HIGH:{bg:"rgba(239,68,68,0.1)",border:"#ef444430",text:"#f87171"},MEDIUM:{bg:"rgba(245,158,11,0.1)",border:"#f59e0b30",text:"#fbbf24"},LOW:{bg:"rgba(16,185,129,0.1)",border:"#10b98130",text:"#34d399"}};
+       const rc = RC_MAP[issue.risk_level]||RC_MAP.MEDIUM;
+       const isOpen = expandedIssue===idx;
+       return (
+        <div key={idx} style={{background:S.card,border:`1px solid ${isOpen?rc.border:S.border}`,borderRadius:10,marginBottom:8,overflow:"hidden",transition:"border-color .15s"}}>
+         <div onClick={()=>setExpandedIssue(isOpen?null:idx)}
+          style={{padding:"11px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>
+          <div style={{flexShrink:0,padding:"2px 7px",borderRadius:4,background:rc.bg,border:`1px solid ${rc.border}`,
+           fontSize:9,fontWeight:700,color:rc.text,minWidth:44,textAlign:"center"}}>{issue.risk_level}</div>
+          <div style={{fontSize:10,color:S.t4,flexShrink:0,minWidth:80}}>{issue.category}</div>
+          <div style={{flex:1,fontSize:12,fontWeight:600,color:S.t1}}>{issue.title}</div>
+          <div style={{display:"flex",gap:3,flexShrink:0}}>
+           {(issue.personas||[]).map(p=>{
+            const pm = PERSONA_DEFS.find(d=>d.key===p);
+            if (!pm) return null;
+            return <span key={p} style={{padding:"1px 5px",borderRadius:3,background:pm.bg,border:`1px solid ${pm.border}`,fontSize:9,color:pm.color,fontWeight:600}}>{pm.label}</span>;
+           })}
+          </div>
+          <span style={{fontSize:11,color:S.t4,marginLeft:4}}>{isOpen?"▲":"▼"}</span>
+         </div>
+         {isOpen && (
+          <div style={{borderTop:`1px solid ${S.border}`,padding:"12px 14px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+           <div style={{gridColumn:"1/-1"}}>
+            <div style={{fontSize:10,color:S.t4,marginBottom:3}}>설명</div>
+            <div style={{fontSize:12,color:S.t2,lineHeight:1.75}}>{issue.description}</div>
+           </div>
+           {issue.relevant_clause && (
+            <div style={{gridColumn:"1/-1",background:S.cardIn,border:`1px solid ${S.border}`,borderRadius:6,padding:"8px 12px"}}>
+             <div style={{fontSize:9,color:S.t4,marginBottom:3}}>
+              조항 원문{issue.clause_reference&&<span style={{color:"#60a5fa"}}> ({issue.clause_reference})</span>}
+             </div>
+             <div style={{fontSize:11,color:S.t3,lineHeight:1.7,fontStyle:"italic"}}>"{issue.relevant_clause}"</div>
+            </div>
+           )}
+           {issue.impact && (
+            <div>
+             <div style={{fontSize:10,color:"#fbbf24",marginBottom:3}}>영향</div>
+             <div style={{fontSize:12,color:S.t2,lineHeight:1.7}}>{issue.impact}</div>
+            </div>
+           )}
+           {issue.recommended_action && (
+            <div>
+             <div style={{fontSize:10,color:"#34d399",marginBottom:3}}>권고 조치</div>
+             <div style={{fontSize:12,color:S.t2,lineHeight:1.7}}>{issue.recommended_action}</div>
+            </div>
+           )}
+          </div>
+         )}
+        </div>
+       );
+      })}
+     </div>
+    )}
+
+    {/* 초기 빈 상태 */}
+    {!result && !personaResult && !loading && !error && (
      <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"70%",gap:16}}>
       <div style={{width:52,height:52,borderRadius:12,background:S.card,border:`1px solid ${S.border}`,
        display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,opacity:0.4}}>⚖</div>
       <div style={{fontSize:13,color:S.t4,textAlign:"center",lineHeight:2.2}}>
        법적 상황을 입력하면<br/>
-       <span style={{color:"#60a5fa"}}>법적</span> · <span style={{color:"#34d399"}}>사업</span> · <span style={{color:"#a78bfa"}}>기술</span> · <span style={{color:"#fb923c"}}>파트너십</span> 4관점 분석<br/>
+       <span style={{color:"#60a5fa",fontWeight:600}}>4관점 분석</span> 또는 <span style={{color:"#a78bfa",fontWeight:600}}>5 페르소나 분석</span> 중 선택<br/>
        <span style={{fontSize:11,color:"#334155"}}>수용/조건부/거부 판단 · 리스크카드 · Redline · C-Level 리포트</span>
       </div>
      </div>
